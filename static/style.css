@@ -1,0 +1,148 @@
+body {
+    font-family: 'SEGOE UI', sans-serif;
+    background: linear-gradient(135deg, #eef2f7, #dbe6f6);
+    margin: 0;
+}
+
+.container {
+    width: 900px;
+    margin: 60px auto;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+h1 {
+    font-weight: 600;
+    text-align: center;
+    color: #2c3e50;
+}
+
+h2 {
+    margin-bottom: 15px;
+    color: #34495e;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+form input {
+    width: 95%;
+    padding: 10px;
+    margin-bottom: 12px;
+    margin-right: 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.form-section button {
+    width: 100%;
+    padding: 10px;
+    background: #3498db;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.aluno-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.aluno-info span {
+    color: #7f8c8d;
+    font-size: 14px;
+}
+
+.actions button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: 0.2 ease;
+}
+
+button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-edit {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 5px;
+    background: #f39c12;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-edit:hover {
+    background: #e67e22;
+}
+
+.btn-delete {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-delete:hover {
+    background: #c0392b;
+}
+
+.btn-back {
+    background: darkcyan;
+    color: white;
+    font-weight: 600;
+    width: 100%;
+}
+
+.btn-back:hover {
+    background: darkgreen;
+}
+
+button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    transition: 0.2s;
+}
+
+.contador {
+    text-align: center;
+    color: #7f8c8d;
+    margin-bottom: 30px;
+    font-size: 14px;
+}
+
+.alert-success {
+    background: #2ecc71;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.busca-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.busca-form input{
+    flex: 1;
+    padding: 8px;
+}

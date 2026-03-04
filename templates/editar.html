@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <title>Editar Aluno</title>
+</head>
+<body>
+    <div class="container">
+        <section class="form-section card">
+            <h1>✏️ Editar Alunos</h1>
+            <form method="POST", class="form input">
+                Nome:
+                <input type="text" name="nome" value="{{ aluno[1] }}" required><br>
+
+                Idade:
+                <input type="number" name="idade" value="{{ aluno[2] }}" required><br>
+
+                Turma:
+                <input type="text" name="turma" value="{{ aluno[3] }}" required><br>
+
+                <button type="submit">Salvar Alterações</button>
+            </form>
+        </section>
+    </div>
+    <div class="container">
+        <a href="/">
+            <button class="btn-back">Voltar</button>
+        </a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+escola.db
+.env
+.DS_Store

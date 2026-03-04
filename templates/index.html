@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <title>Sistema Escolar Online</title>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Sistema Escolar Online 🚀</h1>
+            <p class="contador"> Total de alunos: {{ total }}</p>
+        </header>
+
+        <section class="form-section card">
+            <h2>Cadastrar novo aluno</h2>
+            <form method="POST">
+                Nome: <input type="text" name="nome" placeholder="Nome" required><br>
+                Idade: <input type="number" name="idade" placeholder="Idade" required><br>
+                Turma: <input type="text" name="turma" placeholder="Turma" required><br>
+                <button type="submit">Cadastrar</button>
+            </form>
+        </section>
+        <section class="header">
+            <form method="GET" class="busca-form">
+                <input type="text" name="busca" placeholder="Buscar por um nome...">
+                <button type="submit">Buscar</button>
+            </form>
+        </section>
+        <section class="list-section">
+            
+            {% if sucesso %}
+                <div class="alert-success">✅ Aluno cadastrado com sucesso!
+                </div>
+            {% endif %}
+            
+            <h2>Lista de Alunos</h2>
+
+            {% for aluno in alunos %}
+                <div class="card">
+                    <strong>{{ aluno[1] }}</strong><br>
+                    Idade: {{ aluno[2] }}<br>
+                    Turma: {{ aluno[3] }}<br><br>
+
+                    <a href="/editar/{{ aluno[0] }}" class="btn-edit">Editar</a>
+
+                    <form action="/remover/{{ aluno[0] }}" method="POST"
+                    onsubmit="return confirm('Tem certeza que deseja remover este aluno?')">
+                        <button class="btn-delete">Remover</button>
+                </form>
+
+                </div>
+            {% endfor %}
+        </section>
+
+    </div>    
+</body>
+</html>
