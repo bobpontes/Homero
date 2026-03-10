@@ -130,6 +130,27 @@ def financeiro():
         total=total
     )
 
+@app.route("/pagar/<int:id>", methods=["POST"])
+def registrar_pagamento(id):
+
+    data_pagamento = request.form.get("data_pagamento")
+    metodo_pagamento = request.form.get("metodo_pagamento")
+
+    if not data_pagamento or not metodo_pagamento:
+        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+
+    conn = sqlite3.connect("escola.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""", 
+                   (data_pagamento, metodo_pagamento,id))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("financeiro"))
+
+
 def criar_banco():
     conn = sqlite3.connect('escola.db')
     cursor = conn.cursor()
