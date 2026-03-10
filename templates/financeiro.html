@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <title>Financeiro</title>
+</head>
+<body>
+    <h1>💰 Financeiro</h1>
+    
+    <div class="container">
+        <h2>Resumo</h2>
+
+        <p>Pendentes: {{ pendentes }}</p>
+        <p>Pagas: {{ pagos }}</p>
+        <p>Total: {{ total }}</p>
+    </div>
+
+    <div class="card">
+        <h2>Mensalidades</h2>
+
+        <table>
+            <thead>
+            <tr>
+                <th>Aluno</th>
+                <th>Valor</th>
+                <th>Vencimento</th>
+                <th>Status</th>
+                <th>Ação</th>
+            </tr>
+            </thead>
+            
+            <tbody>
+            {% for m in mensalidades %}
+            <tr>
+                <td>{{ m[1] }}</td>
+                <td>{{ m[2] }}</td>
+                <td>{{ m[3] }}</td>
+                <td>{{ m[4] }}</td>
+                <td>
+                    <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">Registra Pagamento</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        </table>
+    </div>
+</body>
+</html>

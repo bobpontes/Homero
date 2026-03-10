@@ -1,6 +1,5 @@
 import sqlite3
 from flask import Flask, request, render_template, redirect, url_for, abort
-import json
 
 app = Flask(__name__)
 
@@ -34,7 +33,7 @@ def home():
             (f"%{busca}%", )
         )
     else:
-        cursor.execute("SELECT * FROM alunos")
+        cursor.execute("SELECT * FROM alunos ORDER BY nome")
 
     alunos = cursor.fetchall()
     conn.close()
@@ -42,7 +41,7 @@ def home():
     total = len(alunos)
     return render_template("index.html", alunos=alunos, total=total, sucesso=sucesso, busca=busca)
 
-@app.route("/remover/<int:id>")
+@app.route("/remover/<int:id>", methods=["POST"])
 def remover_aluno(id):
     conn = sqlite3.connect('escola.db')
     cursor = conn.cursor()
@@ -93,6 +92,44 @@ def editar_aluno(id):
     conn.close()
     return render_template("editar.html", aluno=aluno)
 
+@app.route("/financeiro")
+def financeiro():
+    
+    conn = sqlite3.connect("escola.db")
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT mensalidades.id,
+                alunos.nome,
+                mensalidades.valor,
+                mensalidades.data_vencimento,
+                mensalidades.status
+            FROM mensalidades
+            JOIN alunos ON mensalidades.aluno_id = alunos.id
+            ORDER BY
+                CASE WHEN mensalidades.status = 'pendente' THEN 0 ELSE 1 END,
+                mensalidades.data_vencimento ASC
+        ''')
+    
+    mensalidades = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(*) FROM mensalidades WHERE status = 'pendente'")
+    pendentes = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM mensalidades WHERE status = 'pago'")
+    pagos = cursor.fetchone()[0]
+    
+    total = len(mensalidades)
+    conn.close()
+
+    return render_template(
+        "financeiro.html",
+        mensalidades=mensalidades,
+        pendentes=pendentes,
+        pagos=pagos,
+        total=total
+    )
+
 def criar_banco():
     conn = sqlite3.connect('escola.db')
     cursor = conn.cursor()
@@ -105,6 +142,20 @@ def criar_banco():
             turma TEXT NOT NULL
         )
     ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS mensalidades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            aluno_id INTEGER NOT NULL,
+            valor REAL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            metodo_pagamento TEXT,
+            FOREIGN KEY (aluno_id) REFERENCES alunos(id)
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
