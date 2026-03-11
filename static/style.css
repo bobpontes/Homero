@@ -70,7 +70,7 @@ form input {
     border-radius: 6px;
     font-size: 14px;
     cursor: pointer;
-    transition: 0.2 ease;
+    transition: 0.2s ease;
 }
 
 button {
@@ -79,6 +79,7 @@ button {
     border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
+    transition: 0.2s;
 }
 
 .btn-edit {
@@ -114,10 +115,22 @@ button {
     background: darkgreen;
 }
 
+.btn-pagar {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 5px;
+    background: #04ad75;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-pagar:hover {
+    background: #036947;
+}
+
 button:hover {
     opacity: 0.9;
     transform: translateY(-1px);
-    transition: 0.2s;
 }
 
 .contador {
@@ -145,4 +158,40 @@ button:hover {
 .busca-form input{
     flex: 1;
     padding: 8px;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background: white;
+    padding: 25px;
+    border-radius: 10px;
+    width: 400px;
+
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+
+    animation: aparecer 0.2s ease;
+}
+
+@keyframes aparecer {
+        from {
+            transform: scale(0.95);
+            opacity: 0;
+        }
+        
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
 }
