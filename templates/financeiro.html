@@ -5,96 +5,110 @@
     <title>Financeiro</title>
 </head>
 <body>
-    <div class="header">
-    <h1>💰 Financeiro</h1>
-    </div>
-    
-    <div class="container">
-            <section class="form-section card">
-                <h2>Resumo</h2>
+    <div class="layout">
 
-                <p>Pendentes: {{ pendentes }}</p>
-                <p>Pagas: {{ pagos }}</p>
-                <p>Total: {{ total }}</p>
-            </section>
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+            </nav>
+        </aside>
         
-            <section class="list-section">
-                <div class="card">
-                    <h2>Mensalidades</h2>
+        <main class="content">
+            <div class="header">
+            <h1>💰 Financeiro</h1>
+            </div>
+            
+            <div class="container">
+                    <section class="form-section card">
+                        <h2>Resumo</h2>
 
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Aluno</th>
-                            <th>Valor</th>
-                            <th>Vencimento</th>
-                            <th>Status</th>
-                            <th>Ação</th>
-                        </tr>
-                        </thead>
-                        
-                        <tbody>
-                        {% for m in mensalidades %}
-                        <tr>
-                            <td>{{ m[1] }}</td>
-                            <td>{{ m[2] }}</td>
-                            <td>{{ m[3] }}</td>
-                            <td>{{ m[4] }}</td>
-                            <td>
-                                <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">Registrar Pagamento</button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    </table>
-                </div>
-        </div>
-
-    <!-- Modal de Pagamento --> 
-    <div id="modalPagamento" class="modal">
-        <div class="modal-content">
-
-            <h3>Registrar Pagamento</h3>
-
-            <form id="formPagamento" method="POST">
-
-                <label>Data do pagamento</label>
-                <input type="date" name="data_pagamento" required>
-
-                <label>Método de pagamento</label>
-                <select name="metodo_pagamento" required>
-                    <option value="pix">Pix</option>
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Cartão">Cartão</option>
-                    <option value="Boleto">Boleto</option>
-                </select>
-
-                    <br><br>
-
-                    <button type="submit">Confirmar Pagamento</button>
-                    <button type="button" onclick="fecharModal()">Cancelar</button>
-            </form>
+                        <p>Pendentes: {{ pendentes }}</p>
+                        <p>Pagas: {{ pagos }}</p>
+                        <p>Total: {{ total }}</p>
+                    </section>
                 
-        </div>
-     </div>
+                    <section class="list-section">
+                        <div class="card">
+                            <h2>Mensalidades</h2>
 
-     <!-- JavaScript para fazer o Modal de Pagamento funcionar -->
-    <script>
-    
-    function abrirModal(id) {
+                            <table>
+                                <thead>
+                                <tr>
+                                    <th>Aluno</th>
+                                    <th>Valor</th>
+                                    <th>Vencimento</th>
+                                    <th>Status</th>
+                                    <th>Ação</th>
+                                </tr>
+                                </thead>
+                                
+                                <tbody>
+                                {% for m in mensalidades %}
+                                <tr>
+                                    <td>{{ m[1] }}</td>
+                                    <td>{{ m[2] }}</td>
+                                    <td>{{ m[3] }}</td>
+                                    <td>{{ m[4] }}</td>
+                                    <td>
+                                        <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">Registrar Pagamento</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
 
-        const modal = document.getElementById("modalPagamento")
-        const form = document.getElementById("formPagamento")
-    
-        form.action = "/pagar/"+ id
+            <!-- Modal de Pagamento --> 
+            <div id="modalPagamento" class="modal">
+                <div class="modal-content">
 
-        modal.style.display = "flex"
-    }
+                    <h3>Registrar Pagamento</h3>
 
-    function fecharModal() {
-        document.getElementById("modalPagamento").style.display = "none"
-    }
-    </script>
+                    <form id="formPagamento" method="POST">
 
+                        <label>Data do pagamento</label>
+                        <input type="date" name="data_pagamento" required>
+
+                        <label>Método de pagamento</label>
+                        <select name="metodo_pagamento" required>
+                            <option value="pix">Pix</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão">Cartão</option>
+                            <option value="Boleto">Boleto</option>
+                        </select>
+
+                            <br><br>
+
+                            <button type="submit">Confirmar Pagamento</button>
+                            <button type="button" onclick="fecharModal()">Cancelar</button>
+                    </form>
+                        
+                </div>
+            </div>
+
+            <!-- JavaScript para fazer o Modal de Pagamento funcionar -->
+            <script>
+            
+            function abrirModal(id) {
+
+                const modal = document.getElementById("modalPagamento")
+                const form = document.getElementById("formPagamento")
+            
+                form.action = "/pagar/"+ id
+
+                modal.style.display = "flex"
+            }
+
+            function fecharModal() {
+                document.getElementById("modalPagamento").style.display = "none"
+            }
+            </script>
+        </main>
+    </div>
 </body>
 </html>

@@ -1,5 +1,5 @@
 body {
-    font-family: 'SEGOE UI', sans-serif;
+    font-family: 'SEGOE UI', system-ui, -apple-system, sans-serif;
     background: linear-gradient(135deg, #eef2f7, #dbe6f6);
     margin: 0;
 }
@@ -79,7 +79,7 @@ button {
     border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
-    transition: 0.2s;
+    transition: all 0.2s ease;
 }
 
 .btn-edit {
@@ -194,4 +194,75 @@ button:hover {
             transform: scale(1);
             opacity: 1;
         }
+}
+
+.layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 220px;
+    background: rgba(31, 41, 55, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+    color: white;
+    padding: 25px;
+}
+
+.logo {
+    margin-bottom: 30px;
+}
+
+.sidebar a {
+    display: block;
+    padding: 10px;
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    transition: background 0.20s ease;
+}
+
+.sidebar a:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.content {
+    flex: 1;
+    padding: 40px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #eef1f5;
+}
+
+th {
+    color: #34495e;
+    font-weight: 600;
+}
+
+tr:nth-child(even) {
+    background: #f8f9fb;
+}
+
+table tr {
+    transition: background 0.15s ease;
+}
+
+table tr:hover {
+    background: #f5f7fb;
+}
+
+.sidebar a.active {
+    background: #374151;
 }
