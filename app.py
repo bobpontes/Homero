@@ -1,5 +1,6 @@
 import sqlite3
 from flask import Flask, request, render_template, redirect, url_for, abort
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
@@ -36,15 +37,19 @@ def home():
         cursor.execute("SELECT * FROM alunos ORDER BY nome")
 
     alunos = cursor.fetchall()
+    
+    cursor.execute("SELECT COUNT(*) FROM alunos")
+    total = cursor.fetchone()[0]
+
     conn.close()
 
-    total = len(alunos)
     return render_template("index.html", alunos=alunos, total=total, sucesso=sucesso, busca=busca)
 
 @app.route("/remover/<int:id>", methods=["POST"])
 def remover_aluno(id):
     conn = sqlite3.connect('escola.db')
     cursor = conn.cursor()
+
 
     cursor.execute("SELECT * FROM alunos WHERE id = ?", (id, ))
     aluno = cursor.fetchone()
@@ -119,7 +124,8 @@ def financeiro():
     cursor.execute("SELECT COUNT(*) FROM mensalidades WHERE status = 'pago'")
     pagos = cursor.fetchone()[0]
     
-    total = len(mensalidades)
+    cursor.execute("SELECT COUNT(*) FROM mensalidades")
+    total = cursor.fetchone()[0]
     conn.close()
 
     return render_template(
@@ -129,6 +135,37 @@ def financeiro():
         pagos=pagos,
         total=total
     )
+
+@app.route("/mensalidade/nova", methods=["POST"])
+def nova_mensalidade():
+
+    conn = sqlite3.connect("escola.db")
+    cursor = conn.cursor()
+
+    aluno_id = request.form.get("aluno_id")
+    valor = request.form.get("valor")
+    data_vencimento = request.form.get("data_vencimento")
+    parcelas = int(request.form.get("parcelas") or 1)
+    
+    if aluno_id and valor and data_vencimento and parcelas:
+        data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
+        valor = float(valor)
+
+        for i in range(parcelas):
+            data_parcela = data_base + timedelta(days=30 * i)
+
+            cursor.execute(
+                "INSERT INTO mensalidades (aluno_id, valor, data_vencimento) VALUES (?, ?, ?)",
+                (aluno_id, valor, data_parcela.strftime("%Y-%m-%d"))
+            )
+        conn.commit()
+        conn.close()
+        return redirect(url_for("financeiro"))
+    
+    conn.close()
+    abort(400, "Todos os campos são obrigatórios.")
+
+
 
 @app.route("/pagar/<int:id>", methods=["POST"])
 def registrar_pagamento(id):
