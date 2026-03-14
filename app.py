@@ -1,8 +1,13 @@
 import sqlite3
 from flask import Flask, request, render_template, redirect, url_for, abort
 from datetime import datetime, timedelta
+import calendar
 
 app = Flask(__name__)
+
+# função para chamar o banco de dados:
+def get_db():
+    return sqlite3.connect("escola.db")
 
 @app.errorhandler(404)
 def pagina_nao_encontrada(e):
@@ -25,7 +30,7 @@ def home():
     
     busca = request.args.get("busca")
 
-    conn = sqlite3.connect("escola.db")
+    conn = get_db()
     cursor = conn.cursor()
 
     if busca:
@@ -47,7 +52,7 @@ def home():
 
 @app.route("/remover/<int:id>", methods=["POST"])
 def remover_aluno(id):
-    conn = sqlite3.connect('escola.db')
+    conn = get_db()
     cursor = conn.cursor()
 
 
@@ -58,6 +63,9 @@ def remover_aluno(id):
         conn.close()
         abort(404)
 
+    # apagar mensalidades associadas a este aluno (antes de apagar o aluno)
+    cursor.execute("DELETE FROM mensalidades WHERE aluno_id = ?", (id, ))
+    # (após) apagar o aluno do banco
     cursor.execute("DELETE FROM alunos WHERE id = ?", (id,))
     conn.commit()
     conn.close()
@@ -67,7 +75,7 @@ def remover_aluno(id):
 @app.route("/editar/<int:id>", methods=["GET", "POST"])
 def editar_aluno(id):
 
-    conn = sqlite3.connect('escola.db')
+    conn = get_db()
     cursor = conn.cursor()
 
     # buscar aluno primeiro:
@@ -100,7 +108,7 @@ def editar_aluno(id):
 @app.route("/financeiro")
 def financeiro():
     
-    conn = sqlite3.connect("escola.db")
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -110,7 +118,7 @@ def financeiro():
                 mensalidades.data_vencimento,
                 mensalidades.status
             FROM mensalidades
-            JOIN alunos ON mensalidades.aluno_id = alunos.id
+            LEFT JOIN alunos ON mensalidades.aluno_id = alunos.id
             ORDER BY
                 CASE WHEN mensalidades.status = 'pendente' THEN 0 ELSE 1 END,
                 mensalidades.data_vencimento ASC
@@ -126,6 +134,10 @@ def financeiro():
     
     cursor.execute("SELECT COUNT(*) FROM mensalidades")
     total = cursor.fetchone()[0]
+
+    cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
+    alunos = cursor.fetchall()
+
     conn.close()
 
     return render_template(
@@ -133,26 +145,48 @@ def financeiro():
         mensalidades=mensalidades,
         pendentes=pendentes,
         pagos=pagos,
-        total=total
+        total=total,
+        alunos=alunos
     )
+
+def adicionar_meses(data_base, meses):
+    mes = data_base.month -1 + meses
+    ano = data_base.year + mes // 12
+    mes = mes % 12 + 1
+    dia = min(data_base.day, calendar.monthrange(ano, mes)[1])
+    return datetime(ano, mes, dia)
 
 @app.route("/mensalidade/nova", methods=["POST"])
 def nova_mensalidade():
 
-    conn = sqlite3.connect("escola.db")
+    conn = get_db()
     cursor = conn.cursor()
 
+    # Checagem se o aluno existe para evitar erros:
     aluno_id = request.form.get("aluno_id")
+
+    cursor.execute("SELECT id FROM alunos WHERE id = ?", (aluno_id, ))
+    aluno = cursor.fetchone()
+
+    if not aluno:
+        conn.close()
+        abort(400, "Aluno não encontrado.")
+
+    aluno_id = int(aluno_id)
     valor = request.form.get("valor")
     data_vencimento = request.form.get("data_vencimento")
-    parcelas = int(request.form.get("parcelas") or 1)
+    parcelas = request.form.get("parcelas") 
+    try:
+        parcelas = int(parcelas) if parcelas else 1 # Se não for informado, assume 1 parcela
+    except ValueError:
+        abort(400, "Número de parcelas inválido.")
     
     if aluno_id and valor and data_vencimento and parcelas:
         data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
         valor = float(valor)
 
         for i in range(parcelas):
-            data_parcela = data_base + timedelta(days=30 * i)
+            data_parcela = adicionar_meses(data_base, i)
 
             cursor.execute(
                 "INSERT INTO mensalidades (aluno_id, valor, data_vencimento) VALUES (?, ?, ?)",
@@ -176,7 +210,7 @@ def registrar_pagamento(id):
     if not data_pagamento or not metodo_pagamento:
         abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
 
-    conn = sqlite3.connect("escola.db")
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""", 
@@ -187,9 +221,21 @@ def registrar_pagamento(id):
 
     return redirect(url_for("financeiro"))
 
+@app.route("/mensalidade/remover/<int:id>", methods=["POST"])
+def remover_mensalidade(id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM mensalidades WHERE id = ?", (id, ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("financeiro"))
+
 
 def criar_banco():
-    conn = sqlite3.connect('escola.db')
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -218,7 +264,7 @@ def criar_banco():
     conn.close()
 
 def listar_alunos_db():
-    conn = sqlite3.connect('escola.db')
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM alunos")
@@ -228,7 +274,7 @@ def listar_alunos_db():
     return alunos
 
 def inserir_aluno(nome, idade, turma):
-    conn = sqlite3.connect('escola.db')
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute(

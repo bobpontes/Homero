@@ -29,6 +29,11 @@
                         <p>Pagas: {{ pagos }}</p>
                         <p>Total: {{ total }}</p>
                     </section>
+
+                    <section class="card">
+                        <h2>Ações</h2>
+                        <button class="btn-pagar" onclick="abrirModalNova()">✚ Nova Mensalidade</button>
+                    </section>
                 
                     <section class="list-section">
                         <div class="card">
@@ -41,7 +46,7 @@
                                     <th>Valor</th>
                                     <th>Vencimento</th>
                                     <th>Status</th>
-                                    <th>Ação</th>
+                                    <th>Ações</th>
                                 </tr>
                                 </thead>
                                 
@@ -54,6 +59,10 @@
                                     <td>{{ m[4] }}</td>
                                     <td>
                                         <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">Registrar Pagamento</button>
+                                        <form action="/mensalidade/remover/{{ m[0] }}" method="POST" style="display:inline">
+                                            <button class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta mensalidade?')">🗑️</button>
+                                        </form>     
+                                        
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -62,6 +71,41 @@
                         </div>
                     </section>
                 </div>
+
+            <!-- Modal de Nova Mensalidade -->
+             <div id="modalNovaMensalidade" class="modal">
+                <div class="modal-content">
+                    <h3>Nova Mensalidade</h3>
+
+                    <form method="POST" action="/mensalidade/nova">
+
+                        <label>Aluno</label>
+                        <select name="aluno_id" required>
+                            <option value="">Selecione um aluno</option>
+                            {% for aluno in alunos %}
+                                <option value="{{ aluno[0] }}">
+                                    {{ aluno[1] }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <br><br>
+
+                        <label>Valor</label>
+                        <input type="number" step="0.01" name="valor" required>
+
+                        <label>Data de vencimento</label>
+                        <input type="date" name="data_vencimento" required>
+
+                        <label>Parcelas</label>
+                        <input type="number" name="parcelas" min="1" value="1">
+
+                        <br><br>
+
+                        <button class="btn-pagar" type="submit">Criar Mensalidades</button>
+                        <button class="btn-editar" type="button" onclick="fecharModalNova()">Cancelar</button>
+                    </form>
+                </div>
+             </div>
 
             <!-- Modal de Pagamento --> 
             <div id="modalPagamento" class="modal">
@@ -106,6 +150,14 @@
 
             function fecharModal() {
                 document.getElementById("modalPagamento").style.display = "none"
+            }
+
+            function abrirModalNova() {
+                document.getElementById("modalNovaMensalidade").style.display = "flex"
+            }
+
+            function fecharModalNova() {
+                document.getElementById("modalNovaMensalidade").style.display = "none"
             }
             </script>
         </main>
