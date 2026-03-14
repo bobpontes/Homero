@@ -1,11 +1,12 @@
 body {
     font-family: 'SEGOE UI', system-ui, -apple-system, sans-serif;
-    background: linear-gradient(135deg, #eef2f7, #dbe6f6);
+    background: linear-gradient(135deg, #eef2f7 0%, #dbe6f6 40%, #cfdff5 100%);
     margin: 0;
 }
 
 .container {
-    width: 900px;
+    max-width: 900px;
+    width: 100%;
     margin: 60px auto;
 }
 
@@ -26,11 +27,20 @@ h2 {
 }
 
 .card {
-    background: white;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
     padding: 20px;
     border-radius: 12px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
     margin-bottom: 20px;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+    transition: all 0.2s ease;
 }
 
 form input {
@@ -98,6 +108,10 @@ button {
 .btn-delete {
     background: #e74c3c;
     color: white;
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 5px;
+    text-decoration: none;
 }
 
 .btn-delete:hover {
@@ -203,6 +217,11 @@ button:hover {
 
 .sidebar {
     width: 220px;
+    height: 100vh;
+    left: 0;
+    top: 0;
+    position: fixed;
+
     background: rgba(31, 41, 55, 0.85);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -210,34 +229,52 @@ button:hover {
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
     color: white;
     padding: 25px;
+    
+    display: flex;
+    flex-direction: column;
 }
 
 .logo {
     margin-bottom: 30px;
+    color: #ecf0f1;
+    font-size: 24px;
+    font-weight: 700;
 }
 
 .sidebar a {
-    display: block;
-    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    padding: 10px 12px;
+    margin-bottom: 6px;
+
     color: white;
     text-decoration: none;
+
     border-radius: 6px;
-    margin-bottom: 10px;
-    transition: background 0.20s ease;
+    transition: all 0.20s ease;
 }
 
 .sidebar a:hover {
     background: rgba(255, 255, 255, 0.08);
+    transform: translateX(3px);
 }
 
 .content {
     flex: 1;
     padding: 40px;
+    margin-left: 220px;
 }
 
 table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(4px);
+    border-radius: 10px;
+    overflow: hidden;
 }
 
 th, td {
@@ -249,10 +286,33 @@ th, td {
 th {
     color: #34495e;
     font-weight: 600;
+    background: rgba(0, 0, 0, 0.03);
+    font-size: 14px;
+    letter-spacing: 0.02em;
 }
 
 tr:nth-child(even) {
-    background: #f8f9fb;
+    background: rgba(0, 0, 0, 0.02);
+}
+
+td .btn-edit,
+td .btn-delete,
+td .btn-pagar {
+    margin-right: 6px;
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+td .btn-edit {
+    box-shadow: 0 2px 6px rgba(243, 156, 18, 0.25);
+}
+
+td .btn-delete {
+    box-shadow: 0 2px 6px rgba(231, 76, 60, 0.25);
+}
+
+td .btn-pagar {
+    box-shadow: 0 2px 6px rgba(4, 173, 117, 0.25);
 }
 
 table tr {
