@@ -326,3 +326,89 @@ table tr:hover {
 .sidebar a.active {
     background: #374151;
 }
+
+.status-pago {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.status-pendente {
+    color: #f39c12;
+    font-weight: bold;
+}
+
+.status-vencido {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+tr.linha-vencida td {
+    background: rgba(231, 76, 60, 0.08);
+}
+
+tr.linha-vencida td:first-child {
+    border-left: 4px solid #e74c3c;
+}
+
+tr.linha-vencida:hover td {
+    background: rgba(231, 76, 60, 0.15);
+}
+
+/* ===== DASHBOARD FINANCEIRO ===== */
+
+.dashboard-resumo {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.resumo-item {
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(8px);
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    transition: transform 0.15s ease;
+}
+
+.resumo-item:hover {
+    transform: translateY(-3px);
+}
+
+.resumo-item strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.resumo-item span {
+    font-size: 22px;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+/* cores dos indicadores */
+
+.resumo-vencido {
+    border-left: 4px solid #e74c3c;
+}
+
+.resumo-pendente {
+    border-left: 4px solid #f1c40f;
+}
+
+.resumo-pago {
+    border-left: 4px solid #27ae60;
+}
+
+.resumo-total {
+    border-left: 4px solid #3498db;
+}
+
+@media (max-width: 900px) {
+    .dashboard-resumo {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
