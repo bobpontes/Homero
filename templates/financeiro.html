@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
     <title>Financeiro</title>
@@ -23,11 +23,28 @@
             
             <div class="container">
                     <section class="form-section card">
-                        <h2>Resumo</h2>
+                        <h2>💰 Resumo Financeiro</h2>
 
-                        <p>Pendentes: {{ pendentes }}</p>
-                        <p>Pagas: {{ pagos }}</p>
-                        <p>Total: {{ total }}</p>
+                        <div class="dashboard-resumo">
+                            <div class="resumo-item resumo-vencido">
+                                <strong>🔴 Vencidas</strong>
+                                <span>{{ vencidas }}</span>
+                            </div>
+
+                            <div class="resumo-item resumo-pendente">
+                                <strong>🟡 Pendentes</strong>
+                                <span>{{ pendentes }}</span>
+                            </div>
+
+                            <div class="resumo-item resumo-pago">
+                                <strong>🟢 Pagas</strong>
+                                <span>{{ pagos }}</span>
+                            </div>
+
+                        <div class="resumo-item resumo-total">
+                            <strong>💰 Total em Aberto</strong>
+                            <span>R$ {{ "%.2f"|format(total_aberto) }}</span>
+                        </div>
                     </section>
 
                     <section class="card">
@@ -52,15 +69,23 @@
                                 
                                 <tbody>
                                 {% for m in mensalidades %}
-                                <tr>
+                                <tr class="{% if m[4] == 'vencido' %}linha-vencida{% endif %}">
                                     <td>{{ m[1] }}</td>
-                                    <td>{{ m[2] }}</td>
+                                    <td>R$ {{ "%.2f"|format(m[2]) }}</td>
                                     <td>{{ m[3] }}</td>
-                                    <td>{{ m[4] }}</td>
                                     <td>
-                                        <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">Registrar Pagamento</button>
+                                        {% if m[4] == 'Vencido' %}
+                                            <span class="status-vencido">🔴 Vencido</span>
+                                        {% elif m[4] == 'Pendente' %}
+                                            <span class="status-pendente">🟡 Pendente</span>
+                                        {% else %}
+                                            <span class="status-pago">🟢 Pago</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">✅</button>
                                         <form action="/mensalidade/remover/{{ m[0] }}" method="POST" style="display:inline">
-                                            <button class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta mensalidade?')">🗑️</button>
+                                            <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta mensalidade?')">🗑️</button>
                                         </form>     
                                         
                                     </td>
@@ -101,7 +126,7 @@
 
                         <br><br>
 
-                        <button class="btn-pagar" type="submit">Criar Mensalidades</button>
+                        <button class="btn-pagar" type="submit">➕ Criar Mensalidades</button>
                         <button class="btn-editar" type="button" onclick="fecharModalNova()">Cancelar</button>
                     </form>
                 </div>

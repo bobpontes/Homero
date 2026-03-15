@@ -1,6 +1,6 @@
 import sqlite3
 from flask import Flask, request, render_template, redirect, url_for, abort
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import calendar
 
 app = Flask(__name__)
@@ -116,15 +116,42 @@ def financeiro():
                 alunos.nome,
                 mensalidades.valor,
                 mensalidades.data_vencimento,
-                mensalidades.status
+                CASE
+                    WHEN mensalidades.status = 'pago' THEN 'Pago'
+                    WHEN mensalidades.status = 'pendente'
+                        AND date(mensalidades.data_vencimento) < date('now')
+                    THEN 'Vencido'
+                    ELSE 'Pendente'
+                END AS status
             FROM mensalidades
             LEFT JOIN alunos ON mensalidades.aluno_id = alunos.id
             ORDER BY
-                CASE WHEN mensalidades.status = 'pendente' THEN 0 ELSE 1 END,
+                CASE 
+                    WHEN mensalidades.status = 'pendente'
+                        AND date(mensalidades.data_vencimento) < date('now') THEN 0 
+                    WHEN mensalidades.status = 'pendente' THEN 1
+                    ELSE 2
+                END,
                 mensalidades.data_vencimento ASC
         ''')
     
     mensalidades = cursor.fetchall()
+
+    mensalidades_com_atraso = []
+    for m in mensalidades:
+        id, nome, valor, vencimento, status = m
+
+        dias_atraso = 0
+
+        if status == 'Vencido':
+            vencimento_data = date.fromisoformat(vencimento)
+            dias_atraso = (date.today() - vencimento_data).days
+        
+        mensalidades_com_atraso.append(
+            (id, nome, valor, vencimento, status, dias_atraso)
+        )
+    
+    mensalidades = mensalidades_com_atraso
 
     cursor.execute("SELECT COUNT(*) FROM mensalidades WHERE status = 'pendente'")
     pendentes = cursor.fetchone()[0]
@@ -138,6 +165,25 @@ def financeiro():
     cursor.execute("SELECT id, nome FROM alunos ORDER BY nome")
     alunos = cursor.fetchall()
 
+    # Calcula quantas mensalidades pendentes estão vencidas
+    cursor.execute("""
+    SELECT COUNT(*)
+    FROM mensalidades
+    WHERE status = 'pendente'
+    AND date(data_vencimento) < date('now')
+    """)
+    vencidas = cursor.fetchone()[0]
+
+    # Calcula qual o valor total vencido e pendente (ou seja, o valor total em aberto)
+    cursor.execute("""
+    SELECT SUM(valor)
+    FROM mensalidades
+    WHERE status = 'pendente'
+    """)
+    resultado = cursor.fetchone()
+    total_aberto = resultado[0] or 0.0  # Se for None, retorna 0.0
+
+
     conn.close()
 
     return render_template(
@@ -146,7 +192,9 @@ def financeiro():
         pendentes=pendentes,
         pagos=pagos,
         total=total,
-        alunos=alunos
+        alunos=alunos,
+        vencidas=vencidas,
+        total_aberto=total_aberto
     )
 
 def adicionar_meses(data_base, meses):
@@ -156,6 +204,7 @@ def adicionar_meses(data_base, meses):
     dia = min(data_base.day, calendar.monthrange(ano, mes)[1])
     return datetime(ano, mes, dia)
 
+
 @app.route("/mensalidade/nova", methods=["POST"])
 def nova_mensalidade():
 
@@ -163,7 +212,10 @@ def nova_mensalidade():
     cursor = conn.cursor()
 
     # Checagem se o aluno existe para evitar erros:
-    aluno_id = request.form.get("aluno_id")
+    try:
+        aluno_id = int(request.form.get("aluno_id"))
+    except (TypeError, ValueError):
+        abort(400, "Aluno inválido.")
 
     cursor.execute("SELECT id FROM alunos WHERE id = ?", (aluno_id, ))
     aluno = cursor.fetchone()
@@ -172,7 +224,6 @@ def nova_mensalidade():
         conn.close()
         abort(400, "Aluno não encontrado.")
 
-    aluno_id = int(aluno_id)
     valor = request.form.get("valor")
     data_vencimento = request.form.get("data_vencimento")
     parcelas = request.form.get("parcelas") 
@@ -183,7 +234,16 @@ def nova_mensalidade():
     
     if aluno_id and valor and data_vencimento and parcelas:
         data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
-        valor = float(valor)
+
+        try:
+            valor = float(valor)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Valor inválido.")
+
+        if valor <= 0:
+            conn.close()
+            abort(400, "Valor deve ser maior que zero.")
 
         for i in range(parcelas):
             data_parcela = adicionar_meses(data_base, i)
@@ -225,6 +285,13 @@ def registrar_pagamento(id):
 def remover_mensalidade(id):
     conn = get_db()
     cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
+    mensalidade = cursor.fetchone()
+
+    if not mensalidade:
+        conn.close()
+        abort(404)
 
     cursor.execute("DELETE FROM mensalidades WHERE id = ?", (id, ))
 
