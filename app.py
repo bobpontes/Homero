@@ -108,6 +108,28 @@ def editar_aluno(id):
 @app.route("/financeiro")
 def financeiro():
     
+    # Filtro para dados
+    mes = request.args.get("mes") or None
+    ano = request.args.get("ano") or None
+    data_inicio = request.args.get("data_inicio") or None
+    data_fim = request.args.get("data_fim") or None
+
+    filtro_sql = ""
+    parametros = ()
+
+    if data_inicio and data_fim:
+        filtro_sql = "WHERE date(mensalidades.data_vencimento) BETWEEN date(?) AND date(?)"
+        parametros = (data_inicio, data_fim)
+    elif ano:
+        filtro_sql = "WHERE strftime('%Y', mensalidades.data_vencimento) = ?"
+        parametros = (ano, )
+    else:
+        if not mes:
+            mes = date.today().strftime("%Y-%m")
+            
+        filtro_sql = "WHERE strftime('%Y-%m', mensalidades.data_vencimento) = ?"
+        parametros = (mes, )
+
     conn = get_db()
     cursor = conn.cursor()
 
@@ -125,6 +147,7 @@ def financeiro():
                 END AS status
             FROM mensalidades
             LEFT JOIN alunos ON mensalidades.aluno_id = alunos.id
+            {filtro_sql}
             ORDER BY
                 CASE 
                     WHEN mensalidades.status = 'pendente'
@@ -133,7 +156,7 @@ def financeiro():
                     ELSE 2
                 END,
                 mensalidades.data_vencimento ASC
-        ''')
+        '''.replace("{filtro_sql}", filtro_sql), parametros)
     
     mensalidades = cursor.fetchall()
 
@@ -146,14 +169,18 @@ def financeiro():
         if status == 'Vencido':
             vencimento_data = date.fromisoformat(vencimento)
             dias_atraso = (date.today() - vencimento_data).days
-        
+
         mensalidades_com_atraso.append(
             (id, nome, valor, vencimento, status, dias_atraso)
         )
-    
     mensalidades = mensalidades_com_atraso
 
-    cursor.execute("SELECT COUNT(*) FROM mensalidades WHERE status = 'pendente'")
+    cursor.execute("""
+    SELECT COUNT(*)
+    FROM mensalidades
+    WHERE status = 'pendente'
+    AND date(data_vencimento) >= date('now')
+    """)
     pendentes = cursor.fetchone()[0]
 
     cursor.execute("SELECT COUNT(*) FROM mensalidades WHERE status = 'pago'")
@@ -181,8 +208,28 @@ def financeiro():
     WHERE status = 'pendente'
     """)
     resultado = cursor.fetchone()
-    total_aberto = resultado[0] or 0.0  # Se for None, retorna 0.0
+    total_aberto = resultado[0] if resultado[0] else 0.0  # Se for None, retorna 0.0
 
+    # Calculo de Receita Prevista para Dashboard Financeiro
+    cursor.execute("""
+    SELECT SUM(valor)
+        FROM mensalidades WHERE status = 'pendente' AND strftime('%Y-%m', data_vencimento) = ?
+    """, (mes, ))
+
+    resultado = cursor.fetchone()
+    receita_prevista = resultado[0] if resultado[0] else 0
+
+    # Calculo de Despesa Prevista para Dashboard Financeiro
+    cursor.execute("""
+    SELECT SUM(valor)
+        FROM contas_pagar WHERE status = 'pendente' AND strftime('%Y-%m', data_vencimento) = ?
+    """, (mes, ))
+
+    resultado = cursor.fetchone()
+    despesa_prevista = resultado[0] if resultado[0] else 0
+
+    # Saldo Projetado
+    saldo_projetado = receita_prevista - despesa_prevista
 
     conn.close()
 
@@ -194,7 +241,11 @@ def financeiro():
         total=total,
         alunos=alunos,
         vencidas=vencidas,
-        total_aberto=total_aberto
+        total_aberto=total_aberto,
+        receita_prevista=receita_prevista,
+        despesa_prevista=despesa_prevista,
+        saldo_projetado=saldo_projetado,
+        mes=mes
     )
 
 def adicionar_meses(data_base, meses):
@@ -273,9 +324,17 @@ def registrar_pagamento(id):
     conn = get_db()
     cursor = conn.cursor()
 
+    # Primeiro verificar se a mensalidade existe
+    cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
+    mensalidade = cursor.fetchone()
+
+    if not mensalidade:
+        conn.close()
+        abort(404)
+    
+    # Se existir, registrar pagamento:
     cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""", 
                    (data_pagamento, metodo_pagamento,id))
-
     conn.commit()
     conn.close()
 
@@ -300,6 +359,48 @@ def remover_mensalidade(id):
 
     return redirect(url_for("financeiro"))
 
+@app.route("/conta/nova", methods=["POST"])
+def nova_conta():
+    
+    descricao = request.form.get("descricao")
+    valor = request.form.get("valor")
+    data_vencimento = request.form.get("data_vencimento")
+    plano_conta_id = request.form.get("plano_conta_id")
+    parcelas = request.form.get("parcelas")
+
+    if not descricao or not valor or not data_vencimento or not plano_conta_id:
+        abort(400, "Todos os campos são obrigatórios.")
+
+    try:
+        parcelas = int(parcelas) if parcelas else 1
+    except ValueError:
+        abort(400, "Número de parcelas inválido")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+
+    data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
+
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Valor Inválido.")
+    
+    grupo_parcela_id = int(datetime.now().timestamp())
+
+    for i in range(parcelas):
+        data_parcela = adicionar_meses(data_base, i)
+
+        cursor.execute(
+            "INSERT INTO contas_pagar (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id) VALUES (?, ?, ?, ?, ?)",
+            (descricao, valor, data_parcela.strftime("%Y-%m-%d"), plano_conta_id, grupo_parcela_id)
+        )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("financeiro"))
 
 def criar_banco():
     conn = get_db()
@@ -324,6 +425,38 @@ def criar_banco():
             data_pagamento TEXT,
             metodo_pagamento TEXT,
             FOREIGN KEY (aluno_id) REFERENCES alunos(id)
+        )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS categorias_plano_contas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT UNIQUE,
+        nome TEXT NOT NULL
+    )
+    ''')
+
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS plano_contas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT UNIQUE,
+        nome TEXT NOT NULL,
+        categoria_id INTEGER,
+        FOREIGN KEY (categoria_id) REFERENCES categorias_plano_contas(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contas_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            plano_conta_id INTEGER,
+            grupo_parcela_id INTEGER,
+            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id)
         )
     ''')
 
