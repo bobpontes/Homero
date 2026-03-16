@@ -43,7 +43,7 @@ h2 {
     transition: all 0.2s ease;
 }
 
-form input {
+form input:not(.filtro-grid input) {
     width: 95%;
     padding: 10px;
     margin-bottom: 12px;
@@ -411,4 +411,57 @@ tr.linha-vencida:hover td {
     .dashboard-resumo {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+canvas {
+    max-height: 250px;
+}
+
+.filtro-financeiro {
+    margin-bottom: 25px;
+}
+
+.filtro-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.filtro-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 30px;
+}
+
+.filtro-grid label {
+    font-size: 14px;
+    color: #555;
+}
+
+.filtro-grid input {
+    width: 100%;
+}
+
+.btn-primary {
+    width: 200px;
+    align-self: center;
+}
+
+.filtro-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filtro-field label {
+    display: block;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 4px;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+}
+
+.filtro-field input {
+    margin: 0;
 }

@@ -22,28 +22,66 @@
             </div>
             
             <div class="container">
+                    <!-- Dashboard do financeiro-->
                     <section class="form-section card">
                         <h2>💰 Resumo Financeiro</h2>
+                        <div class="card filtro-financeiro">
+                            <h3>🔎 Filtrar Período</h3>
+                                <form method="GET" action="/financeiro" class="filtro-form">
 
-                        <div class="dashboard-resumo">
-                            <div class="resumo-item resumo-vencido">
-                                <strong>🔴 Vencidas</strong>
-                                <span>{{ vencidas }}</span>
+                                    <div class="filtro-grid">
+                                        <div class="filtro-field">
+                                            <label>Mês</label>
+                                            <input type="month" name="mes" value="{{ mes }}">
+                                        </div>
+                                        
+                                        <div class="filtro-field">
+                                            <label>Ano</label>
+                                            <input type="number" name="ano" placeholder="Ano" min="2000" max="2100">
+                                        </div>
+
+                                        <div class="filtro-field">
+                                            <label>Data início</label>
+                                            <input type="date" name="data_inicio">
+                                        </div>
+
+                                        <div class="filtro-field">
+                                            <label>Data fim</label>
+                                            <input type="date" name="data_fim">
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" class="btn-primary">Atualizar</button>
+                                </form>
                             </div>
+                            <div class="dashboard-resumo">
+                                <div class="resumo-item resumo-vencido">
+                                    <strong>🔴 Vencidas</strong>
+                                    <span>{{ vencidas }}</span>
+                                </div>
 
-                            <div class="resumo-item resumo-pendente">
-                                <strong>🟡 Pendentes</strong>
-                                <span>{{ pendentes }}</span>
+                                <div class="resumo-item resumo-pendente">
+                                    <strong>🟡 Pendentes</strong>
+                                    <span>{{ pendentes }}</span>
+                                </div>
+
+                                <div class="resumo-item resumo-pago">
+                                    <strong>🟢 Pagas</strong>
+                                    <span>{{ pagos }}</span>
+                                </div>
+
+                                <div class="resumo-item resumo-total">
+                                    <strong>💰 Total em Aberto</strong>
+                                    <span>R$ {{ "%.2f"|format(total_aberto) }}</span>
+                                </div>
                             </div>
+                        
+                        
+                        <br><br>
 
-                            <div class="resumo-item resumo-pago">
-                                <strong>🟢 Pagas</strong>
-                                <span>{{ pagos }}</span>
-                            </div>
-
-                        <div class="resumo-item resumo-total">
-                            <strong>💰 Total em Aberto</strong>
-                            <span>R$ {{ "%.2f"|format(total_aberto) }}</span>
+                        <div>
+                            <h3>📊 Fluxo Financeiro</h3>
+                            <canvas id="graficoFinanceiro"></canvas>
                         </div>
                     </section>
 
@@ -69,7 +107,7 @@
                                 
                                 <tbody>
                                 {% for m in mensalidades %}
-                                <tr class="{% if m[4] == 'vencido' %}linha-vencida{% endif %}">
+                                <tr class="{% if m[4] == 'Vencido' %}linha-vencida{% endif %}">
                                     <td>{{ m[1] }}</td>
                                     <td>R$ {{ "%.2f"|format(m[2]) }}</td>
                                     <td>{{ m[3] }}</td>
@@ -184,6 +222,38 @@
             function fecharModalNova() {
                 document.getElementById("modalNovaMensalidade").style.display = "none"
             }
+            </script>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                const ctx = document.getElementById('graficoFinanceiro').getContext('2d');
+
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Receita', 'Despesa', 'Saldo'],
+                        datasets: [{
+                            label: 'Financeiro',
+                            data: [
+                                {{ receita_prevista|default(0) }},
+                                {{ despesa_prevista|default(0) }},
+                                {{ saldo_projetado|default(0) }}
+                            ],
+                            backgroundColor: [
+                                '#4CAF50',
+                                '#F44336',
+                                '#2196F3'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
             </script>
         </main>
     </div>
