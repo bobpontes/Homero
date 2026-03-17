@@ -2,8 +2,12 @@ import sqlite3
 from flask import Flask, request, render_template, redirect, url_for, abort
 from datetime import datetime, timedelta, date
 import calendar
+import shutil
 
 app = Flask(__name__)
+
+# Data de hoje
+today = date.today().strftime("%Y-%m-%d")
 
 # função para chamar o banco de dados:
 def get_db():
@@ -133,7 +137,7 @@ def financeiro():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute('''
+    query = f'''
         SELECT mensalidades.id,
                 alunos.nome,
                 mensalidades.valor,
@@ -156,7 +160,9 @@ def financeiro():
                     ELSE 2
                 END,
                 mensalidades.data_vencimento ASC
-        '''.replace("{filtro_sql}", filtro_sql), parametros)
+        '''
+    
+    cursor.execute(query, parametros)
     
     mensalidades = cursor.fetchall()
 
@@ -296,12 +302,14 @@ def nova_mensalidade():
             conn.close()
             abort(400, "Valor deve ser maior que zero.")
 
+        grupo_parcela_id = int(datetime.now().timestamp()) 
+
         for i in range(parcelas):
             data_parcela = adicionar_meses(data_base, i)
 
             cursor.execute(
-                "INSERT INTO mensalidades (aluno_id, valor, data_vencimento) VALUES (?, ?, ?)",
-                (aluno_id, valor, data_parcela.strftime("%Y-%m-%d"))
+                "INSERT INTO mensalidades (aluno_id, valor, data_vencimento, grupo_parcela_id) VALUES (?, ?, ?, ?)",
+                (aluno_id, valor, data_parcela.strftime("%Y-%m-%d"), grupo_parcela_id)
             )
         conn.commit()
         conn.close()
@@ -366,13 +374,22 @@ def nova_conta():
     valor = request.form.get("valor")
     data_vencimento = request.form.get("data_vencimento")
     plano_conta_id = request.form.get("plano_conta_id")
+    fornecedor_id = request.form.get("fornecedor_id")
     parcelas = request.form.get("parcelas")
 
-    if not descricao or not valor or not data_vencimento or not plano_conta_id:
+    if not descricao or not valor or not data_vencimento or not plano_conta_id or not fornecedor_id:
         abort(400, "Todos os campos são obrigatórios.")
 
     try:
-        parcelas = int(parcelas) if parcelas else 1
+        valor = float(valor)
+    except (TypeError, ValueError):
+        abort(400, "Valor inválido.")
+
+    if valor <= 0:
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        parcelas = max(1, int(parcelas)) if parcelas else 1
     except ValueError:
         abort(400, "Número de parcelas inválido")
     
@@ -380,12 +397,6 @@ def nova_conta():
     cursor = conn.cursor()
 
     data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
-
-    try:
-        valor = float(valor)
-    except (TypeError, ValueError):
-        conn.close()
-        abort(400, "Valor Inválido.")
     
     grupo_parcela_id = int(datetime.now().timestamp())
 
@@ -393,14 +404,119 @@ def nova_conta():
         data_parcela = adicionar_meses(data_base, i)
 
         cursor.execute(
-            "INSERT INTO contas_pagar (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id) VALUES (?, ?, ?, ?, ?)",
-            (descricao, valor, data_parcela.strftime("%Y-%m-%d"), plano_conta_id, grupo_parcela_id)
+            "INSERT INTO contas_pagar (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id, fornecedor_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (descricao, valor, data_parcela.strftime("%Y-%m-%d"), plano_conta_id, grupo_parcela_id, fornecedor_id)
         )
 
     conn.commit()
     conn.close()
 
-    return redirect(url_for("financeiro"))
+    return redirect(url_for("contas_pagar"))
+
+@app.route("/contas-pagar")
+def contas_pagar():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT contas_pagar.id,
+            contas_pagar.descricao,
+            contas_pagar.valor,
+            contas_pagar.data_vencimento,
+            CASE
+                WHEN contas_pagar.status = 'pago' THEN 'Pago'
+                WHEN contas_pagar.status = 'pendente'
+                    AND date(contas_pagar.data_vencimento) < date('now')
+                THEN 'Vencido'
+                ELSE 'Pendente'
+            END AS status,
+            plano_contas.nome AS plano_conta,
+            fornecedores.nome AS fornecedor
+        FROM contas_pagar
+        LEFT JOIN plano_contas
+            ON contas_pagar.plano_conta_id = plano_contas.id
+        LEFT JOIN fornecedores
+            ON contas_pagar.fornecedor_id = fornecedores.id
+        ORDER BY
+            CASE
+                WHEN contas_pagar.status = 'pendente'
+                    AND date(contas_pagar.data_vencimento) < date('now') THEN 0
+                WHEN contas_pagar.status = 'pendente' THEN 1
+                ELSE 2
+            END,
+            contas_pagar.data_vencimento ASC
+                
+""")
+    
+    contas = cursor.fetchall()
+
+    contas_com_atraso = []
+    for c in contas:
+        id, descricao, valor, vencimento, status, plano_conta, fornecedor = c
+
+        dias_atraso = 0
+
+        if status == 'Vencido':
+            vencimento_data = date.fromisoformat(vencimento)
+            dias_atraso = (date.today() - vencimento_data).days
+        
+        contas_com_atraso.append(
+            (id, descricao, valor, vencimento, status, plano_conta, fornecedor, dias_atraso)
+        )
+
+    contas = contas_com_atraso
+
+    cursor.execute("SELECT id, nome FROM categorias_plano_contas ORDER BY nome")
+    categorias = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM plano_contas ORDER BY nome")
+    planos = cursor.fetchall()
+
+    conn.close()
+
+    return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, today=today)
+
+@app.route("/contas_pagar/remover/<int:id>", methods=["POST"])
+def remover_conta(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM contas_pagar WHERE id = ?", (id, ))
+    conta = cursor.fetchone()
+
+    if not conta:
+        conn.close()
+        abort(400, "Essa conta não existe, portanto não pode ser excluída.")
+
+    cursor.execute("DELETE FROM contas_pagar WHERE id = ?", (id, ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_pagar"))
+
+@app.route("/contas_pagar/remover_grupo/<int:grupo_id>", methods=["POST"])
+def remover_grupo_conta(grupo_id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT grupo_parcela_id FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id, ))
+    grupo = cursor.fetchone()
+
+    if not grupo:
+        conn.close()
+        abort(400, "Este grupo de parcelas não existe, portanto nenhuma conta foi excluída.")
+
+    cursor.execute("DELETE FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id, ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_pagar"))
+
 
 def criar_banco():
     conn = get_db()
@@ -456,12 +572,31 @@ def criar_banco():
             data_pagamento TEXT,
             plano_conta_id INTEGER,
             grupo_parcela_id INTEGER,
-            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id)
+            fornecedor_id INTEGER,
+            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
+            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id)
         )
     ''')
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS fornecedores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            telefone TEXT,
+            email TEXT,
+            CPF TEXT,
+            CNPJ TEXT)
+''')
+
     conn.commit()
     conn.close()
+
+def backup_banco():
+    hoje = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    origem = "escola.db"
+    destino = f"backup/escola_{hoje}.db"
+
+    shutil.copy(origem, destino)
 
 def listar_alunos_db():
     conn = get_db()

@@ -465,3 +465,32 @@ canvas {
 .filtro-field input {
     margin: 0;
 }
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    font-weight: 500;
+}
+
+.form-field label {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.linha-vencida {
+    background: #ffe6e6;
+}
+
+.linha-pendente {
+    background: #fff6cc;
+}
+
+.linha-paga {
+    background: #e6f6ea;
+}

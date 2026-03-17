@@ -42,3 +42,8 @@ python app.py
 Abra no navegador:
 
 http://127.0.0.1:5000
+
+## Interface
+
+![Tela inicial](docs/home.png)
+![Tela de edição](docs/edit.png)
