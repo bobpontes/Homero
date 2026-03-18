@@ -616,6 +616,161 @@ def remover_grupo_conta(grupo_id):
 
     return redirect(url_for("contas_pagar"))
 
+@app.route("/contas_receber")
+def contas_receber():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT contas_receber.id,
+            contas_receber.descricao,
+            contas_receber.valor,
+            contas_receber.data_vencimento,
+            CASE
+                WHEN contas_receber.status = 'pago' THEN 'Pago'
+                WHEN contas_receber.status = 'pendente'
+                    AND date(contas_receber.data_vencimento) < date('now')
+                THEN 'Vencido'
+                ELSE 'Pendente'
+            END AS status,
+            plano_contas.nome AS plano_conta,
+            fornecedores.nome AS fornecedor
+        FROM contas_receber
+        LEFT JOIN plano_contas
+            ON contas_receber.plano_conta_id = plano_contas.id
+        LEFT JOIN fornecedores
+            ON contas_receber.fornecedor_id = fornecedores.id
+        ORDER BY
+            CASE
+                WHEN contas_receber.status = 'pendente'
+                    AND date(contas_receber.data_vencimento) < date('now') THEN 0
+                WHEN contas_receber.status = 'pendente' THEN 1
+                ELSE 2
+            END,
+            contas_receber.data_vencimento ASC
+                
+""")
+    
+    receitas = cursor.fetchall()
+
+    receitas_com_atraso = []
+    for r in receitas:
+        id, descricao, valor, vencimento, status, plano_conta, fornecedor = r
+
+        dias_atraso = 0
+
+        if status == 'Vencido':
+            vencimento_data = date.fromisoformat(vencimento)
+            dias_atraso = (date.today() - vencimento_data).days
+        
+        receitas_com_atraso.append(
+            (id, descricao, valor, vencimento, status, plano_conta, fornecedor, dias_atraso)
+        )
+
+    receitas = receitas_com_atraso
+
+    cursor.execute("SELECT id, nome FROM categorias_plano_contas ORDER BY nome")
+    categorias = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM plano_contas ORDER BY nome")
+    planos = cursor.fetchall()
+
+    conn.close()
+
+    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today)
+
+@app.route("/contas_receber/receber/<int:id>", methods=["POST"])
+def registrar_receita(id):
+
+    data_pagamento = request.form.get("data_pagamento")
+    metodo_pagamento = request.form.get("metodo_pagamento")
+
+    if not data_pagamento or not metodo_pagamento:
+        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verificar se conta existe:
+    cursor.execute("SELECT id FROM contas_receber WHERE id = ?", (id, ))
+    receita = cursor.fetchone()
+
+    if not receita:
+        conn.close()
+        abort(404)
+
+    # Verificar se conta já está paga:
+    cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] == 'pago':
+        conn.close()
+        abort(400, "Recebimento já está pago.")
+
+    # Existe a conta, seguir com o pagamento:
+    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""",
+        (data_pagamento, metodo_pagamento, id))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_receber"))
+
+@app.route("/contas_receber/remover/<int:id>", methods=["POST"])
+def remover_receita(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM contas_receber WHERE id = ?", (id, ))
+    receita = cursor.fetchone()
+
+    if not receita:
+        conn.close()
+        abort(400, "Esse recebimento não existe, portanto não pode ser excluída.")
+
+    cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] == 'pago':
+        conn.close()
+        abort(400, "Não é possível excluir recebimento já pago.")
+
+    cursor.execute("DELETE FROM contas_receber WHERE id = ?", (id, ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_receber"))
+
+@app.route("/contas_receber/remover_grupo/<int:grupo_id>", methods=["POST"])
+def remover_grupo_receita(grupo_id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verificar se existe o grupo
+    cursor.execute("SELECT grupo_parcela_id FROM contas_receber WHERE grupo_parcela_id = ?", (grupo_id, ))
+    grupo = cursor.fetchone()
+
+    if not grupo:
+        conn.close()
+        abort(400, "Este grupo de parcelas não existe, portanto nenhum recebimento foi excluído.")
+
+    # Verificar se já existe conta paga no grupo
+    cursor.execute("""SELECT status FROM contas_receber WHERE grupo_parcela_id = ? AND status = 'pago'""", (grupo_id, ))
+    existe_pago = cursor.fetchone()
+
+    if existe_pago:
+        conn.close()
+        abort(400, "Não é possível excluir um grupo com recebimentos já pagos.")
+
+    cursor.execute("DELETE FROM contas_receber WHERE grupo_parcela_id = ?", (grupo_id, ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_receber"))
 
 def criar_banco():
     conn = get_db()
@@ -647,7 +802,8 @@ def criar_banco():
     CREATE TABLE IF NOT EXISTS categorias_plano_contas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         codigo TEXT UNIQUE,
-        nome TEXT NOT NULL
+        nome TEXT NOT NULL,
+        tipo TEXT CHECK(tipo IN ('receita','despesa','transferencia'))
     )
     ''')
 
@@ -672,8 +828,10 @@ def criar_banco():
             plano_conta_id INTEGER,
             grupo_parcela_id INTEGER,
             fornecedor_id INTEGER,
+            evento_id INTEGER,
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
-            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id)
+            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
+            FOREIGN KEY (eventos_id) REFERENCES eventos(id)
         )
     ''')
 
@@ -685,7 +843,29 @@ def criar_banco():
             email TEXT,
             CPF TEXT,
             CNPJ TEXT)
-''')
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS eventos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL
+    )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contas_receber (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            plano_conta_id INTEGER,
+            grupo_parcela_id INTEGER,
+            fornecedor_id INTEGER,
+            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
+            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id))
+    ''')
 
     conn.commit()
     conn.close()

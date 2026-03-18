@@ -97,8 +97,6 @@ SELECT 'Água', id FROM categorias_plano_contas WHERE codigo = '2.4';
 -- =========================
 -- FINANCEIRO ENTRADAS
 -- =========================
-INSERT INTO plano_contas (nome, categoria_id)
-SELECT 'Aporte (Paulo Moutinho)', id FROM categorias_plano_contas WHERE codigo = '5.1';
 
 INSERT INTO plano_contas (nome, categoria_id)
 SELECT 'Devolução', id FROM categorias_plano_contas WHERE codigo = '5.1';
@@ -115,8 +113,6 @@ SELECT 'Repasse', id FROM categorias_plano_contas WHERE codigo = '5.1';
 -- =========================
 -- FINANCEIRO SAÍDAS
 -- =========================
-INSERT INTO plano_contas (nome, categoria_id)
-SELECT 'Aporte (Paulo Moutinho)', id FROM categorias_plano_contas WHERE codigo = '5.2';
 
 INSERT INTO plano_contas (nome, categoria_id)
 SELECT 'Devolução', id FROM categorias_plano_contas WHERE codigo = '5.2';
