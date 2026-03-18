@@ -256,11 +256,17 @@ def financeiro():
     )
 
 def adicionar_meses(data_base, meses):
+    dia_original = data_base.day
+
     mes = data_base.month -1 + meses
     ano = data_base.year + mes // 12
     mes = mes % 12 + 1
-    dia = min(data_base.day, calendar.monthrange(ano, mes)[1])
-    return datetime(ano, mes, dia)
+    
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+
+    # mantém o mesmo dia sempre que possível
+    dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
+    return date(ano, mes, dia)
 
 
 @app.route("/mensalidade/nova", methods=["POST"])
@@ -273,6 +279,7 @@ def nova_mensalidade():
     try:
         aluno_id = int(request.form.get("aluno_id"))
     except (TypeError, ValueError):
+        conn.close()
         abort(400, "Aluno inválido.")
 
     cursor.execute("SELECT id FROM alunos WHERE id = ?", (aluno_id, ))
@@ -289,9 +296,9 @@ def nova_mensalidade():
         parcelas = int(parcelas) if parcelas else 1 # Se não for informado, assume 1 parcela
     except ValueError:
         abort(400, "Número de parcelas inválido.")
-    
-    if aluno_id and valor and data_vencimento and parcelas:
-        data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
+
+    if valor and data_vencimento and parcelas:
+        data_base = datetime.strptime(data_vencimento, "%Y-%m-%d").date()
 
         try:
             valor = float(valor)
@@ -424,8 +431,6 @@ def nova_conta():
     fornecedor_id = request.form.get("fornecedor_id")
     parcelas = request.form.get("parcelas")
 
-    if not descricao or not valor or not data_vencimento or not plano_conta_id or not fornecedor_id:
-        abort(400, "Todos os campos são obrigatórios.")
 
     try:
         valor = float(valor)
@@ -439,11 +444,33 @@ def nova_conta():
         parcelas = max(1, int(parcelas)) if parcelas else 1
     except ValueError:
         abort(400, "Número de parcelas inválido")
+
+    try:
+        plano_conta_id = int(plano_conta_id)
+        fornecedor_id = int(fornecedor_id)
+    except (TypeError, ValueError):
+        abort(400, "Plano de conta ou fornecedor inválido.")
+
     
     conn = get_db()
     cursor = conn.cursor()
 
-    data_base = datetime.strptime(data_vencimento, "%Y-%m-%d")
+    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id, ))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Plano de conta não encontrado.")
+
+    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id, ))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Fornecedor não encontrado.")
+
+    if not descricao or not data_vencimento:
+        conn.close()
+        abort(400, "Descrição e data são obrigatórios.")
+
+
+    data_base = datetime.strptime(data_vencimento, "%Y-%m-%d").date()
     
     grupo_parcela_id = int(datetime.now().timestamp())
 
@@ -680,6 +707,87 @@ def contas_receber():
 
     return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today)
 
+@app.route("/receita/nova", methods=["POST"])
+def nova_receita():
+    
+    descricao = request.form.get("descricao")
+    valor = request.form.get("valor")
+    data_vencimento = request.form.get("data_vencimento")
+    plano_conta_id = request.form.get("plano_conta_id")
+    fornecedor_id = request.form.get("fornecedor_id")
+    evento_id = request.form.get("evento_id")
+    parcelas = request.form.get("parcelas")
+
+
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        abort(400, "Valor inválido.")
+
+    if valor <= 0:
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        parcelas = max(1, int(parcelas)) if parcelas else 1
+    except ValueError:
+        abort(400, "Número de parcelas inválido")
+
+    try:
+        plano_conta_id = int(plano_conta_id)
+        fornecedor_id = int(fornecedor_id)
+    except (TypeError, ValueError):
+        abort(400, "Plano de conta ou fornecedor inválido.")
+
+    
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id, ))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Plano de conta não encontrado.")
+
+    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id, ))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Fornecedor não encontrado.")
+
+    if evento_id:
+        try:
+            evento_id = int(evento_id)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Evento inválido.")
+
+        cursor.execute("SELECT id FROM eventos WHERE id = ?", (evento_id, ))
+        if not cursor.fetchone():
+            conn.close()
+            abort(400, "Evento não encontrado para associar a este recebimento.")
+    else:
+        evento_id = None
+
+    if not descricao or not data_vencimento:
+        conn.close()
+        abort(400, "Descrição e data são obrigatórios.")
+
+
+    data_base = datetime.strptime(data_vencimento, "%Y-%m-%d").date()
+    
+    grupo_parcela_id = int(datetime.now().timestamp())
+
+    for i in range(parcelas):
+        data_parcela = adicionar_meses(data_base, i)
+
+        cursor.execute(
+            "INSERT INTO contas_receber (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id, fornecedor_id, evento_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (descricao, valor, data_parcela.strftime("%Y-%m-%d"), plano_conta_id, grupo_parcela_id, fornecedor_id, evento_id)
+        )
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_receber"))
+
 @app.route("/contas_receber/receber/<int:id>", methods=["POST"])
 def registrar_receita(id):
 
@@ -831,7 +939,7 @@ def criar_banco():
             evento_id INTEGER,
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
             FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (eventos_id) REFERENCES eventos(id)
+            FOREIGN KEY (evento_id) REFERENCES eventos(id)
         )
     ''')
 
@@ -863,8 +971,11 @@ def criar_banco():
             plano_conta_id INTEGER,
             grupo_parcela_id INTEGER,
             fornecedor_id INTEGER,
+            evento_id INTEGER,
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
-            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id))
+            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
+            FOREIGN KEY (evento_id) REFERENCES eventos(id)
+        )
     ''')
 
     conn.commit()

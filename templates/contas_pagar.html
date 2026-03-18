@@ -103,7 +103,7 @@
                 <div class="modal-content">
                     <h3>Nova Conta a Pagar</h3>
 
-                    <form method="POST" action="/contas_pagar/nova">
+                    <form method="POST" action="{{ url_for('nova_conta') }}">
                         
                         <div class="form-grid">
                         
@@ -126,6 +126,15 @@
                                 <select name="plano_conta_id" required>
                                     {% for p in planos %}
                                     <option value="{{ p[0] }}">{{ p[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Fornecedor</label>
+                                <select name="fornecedor_id" required>
+                                    {% for f in fornecedores %}
+                                    <option value="{{ f[0] }}">{{ f[1] }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
