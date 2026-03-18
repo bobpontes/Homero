@@ -113,15 +113,6 @@
                             </div>
 
                             <div class="form-field">
-                                <label>Categoria</label>
-                                <select name="categoria_id" required>
-                                    {% for cat in categorias %}
-                                    <option value="{{ cat[0] }}">{{ cat[1] }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-
-                            <div class="form-field">
                                 <label>Plano de Contas</label>
                                 <select name="plano_conta_id" required>
                                     {% for p in planos %}
