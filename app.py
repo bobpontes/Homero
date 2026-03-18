@@ -940,6 +940,7 @@ def criar_banco():
             grupo_parcela_id INTEGER,
             fornecedor_id INTEGER,
             evento_id INTEGER,
+            metodo_pagamento TEXT,
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
             FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
             FOREIGN KEY (evento_id) REFERENCES eventos(id)
