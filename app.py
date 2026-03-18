@@ -3,6 +3,7 @@ from flask import Flask, request, render_template, redirect, url_for, abort
 from datetime import datetime, timedelta, date
 import calendar
 import shutil
+import os
 
 app = Flask(__name__)
 
@@ -332,15 +333,23 @@ def registrar_pagamento(id):
     conn = get_db()
     cursor = conn.cursor()
 
-    # Primeiro verificar se a mensalidade existe
+    # Primeiro: verificar se a mensalidade existe
     cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
     mensalidade = cursor.fetchone()
 
     if not mensalidade:
         conn.close()
         abort(404)
+
+    # Segundo: verificar se a mensalidade ainda não foi paga
+    cursor.execute("SELECT status FROM mensalidades WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] == 'pago':
+        conn.close()
+        abort(400, "Não é possível registrar o pagamento, a mensalidade já havia sido paga.")
     
-    # Se existir, registrar pagamento:
+    # Se existir e não tiver sido paga, registrar pagamento:
     cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""", 
                    (data_pagamento, metodo_pagamento,id))
     conn.commit()
@@ -353,6 +362,7 @@ def remover_mensalidade(id):
     conn = get_db()
     cursor = conn.cursor()
 
+    # Verificar se mensalidade existe
     cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
     mensalidade = cursor.fetchone()
 
@@ -360,7 +370,44 @@ def remover_mensalidade(id):
         conn.close()
         abort(404)
 
+    # Verficar se mensalidade ainda não foi paga
+    cursor.execute("SELECT status FROM mensalidades WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] == 'pago':
+        conn.close()
+        abort(400, "Não é possível excluir uma mensalidade que já foi registrada como paga.")
+
     cursor.execute("DELETE FROM mensalidades WHERE id = ?", (id, ))
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("financeiro"))
+
+@app.route("/mensalidade/remover_grupo/<int:grupo_id>", methods = ['POST'])
+def remover_grupo_mensalidade(grupo_id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verificar se o grupo existe
+    cursor.execute("SELECT grupo_parcela_id FROM mensalidades WHERE grupo_parcela_id = ?", (grupo_id, ))
+    grupo = cursor.fetchone()
+
+    if not grupo:
+        conn.close()
+        abort(400, "Este grupo de parcelas não existe, portanto nenhuma mensalidade foi excluída.")
+
+    # Verificar se existe alguma mensalidade paga no grupo
+    cursor.execute("""SELECT status FROM mensalidades WHERE grupo_parcela_id = ? AND status = 'pago'""", (grupo_id, ))
+    existe_pago = cursor.fetchone()
+
+    if existe_pago:
+        conn.close()
+        abort(400, "Não é possível excluir um grupo com mensalidades já pagas.")
+
+    cursor.execute("DELETE FROM mensalidades WHERE grupo_parcela_id = ?", (grupo_id, ))
 
     conn.commit()
     conn.close()
@@ -413,7 +460,7 @@ def nova_conta():
 
     return redirect(url_for("contas_pagar"))
 
-@app.route("/contas-pagar")
+@app.route("/contas_pagar")
 def contas_pagar():
 
     conn = get_db()
@@ -477,6 +524,42 @@ def contas_pagar():
 
     return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, today=today)
 
+@app.route("/contas_pagar/pagar/<int:id>", methods=["POST"])
+def registrar_conta(id):
+
+    data_pagamento = request.form.get("data_pagamento")
+    metodo_pagamento = request.form.get("metodo_pagamento")
+
+    if not data_pagamento or not metodo_pagamento:
+        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verificar se conta existe:
+    cursor.execute("SELECT id FROM contas_pagar WHERE id = ?", (id, ))
+    conta = cursor.fetchone()
+
+    if not conta:
+        conn.close()
+        abort(404)
+
+    # Verificar se conta já está paga:
+    cursor.execute("SELECT status FROM contas_pagar WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] == 'pago':
+        conn.close()
+        abort(400, "Conta já está paga.")
+
+    # Existe a conta, seguir com o pagamento:
+    cursor.execute("""UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""",
+        (data_pagamento, metodo_pagamento, id))
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_pagar"))
+
 @app.route("/contas_pagar/remover/<int:id>", methods=["POST"])
 def remover_conta(id):
 
@@ -489,6 +572,13 @@ def remover_conta(id):
     if not conta:
         conn.close()
         abort(400, "Essa conta não existe, portanto não pode ser excluída.")
+
+    cursor.execute("SELECT status FROM contas_pagar WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if resultado and resultado[0] == 'pago':
+        conn.close()
+        abort(400, "Não é possível excluir conta já paga.")
 
     cursor.execute("DELETE FROM contas_pagar WHERE id = ?", (id, ))
 
@@ -503,12 +593,21 @@ def remover_grupo_conta(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
 
+    # Verificar se existe o grupo
     cursor.execute("SELECT grupo_parcela_id FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id, ))
     grupo = cursor.fetchone()
 
     if not grupo:
         conn.close()
         abort(400, "Este grupo de parcelas não existe, portanto nenhuma conta foi excluída.")
+
+    # Verificar se já existe conta paga no grupo
+    cursor.execute("""SELECT status FROM contas_pagar WHERE grupo_parcela_id = ? AND status = 'pago'""", (grupo_id, ))
+    existe_pago = cursor.fetchone()
+
+    if existe_pago:
+        conn.close()
+        abort(400, "Não é possível excluir um grupo com contas já pagas.")
 
     cursor.execute("DELETE FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id, ))
 
@@ -593,6 +692,9 @@ def criar_banco():
 
 def backup_banco():
     hoje = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    
+    os.makedirs("backup", exist_ok=True)
+    
     origem = "escola.db"
     destino = f"backup/escola_{hoje}.db"
 
@@ -621,6 +723,9 @@ def inserir_aluno(nome, idade, turma):
     conn.close()
 
 criar_banco()
+
+# cria um backup automático do banco sempre que o sistema iniciar
+backup_banco()
 
 if __name__ == '__main__':
     app.run(debug=True)

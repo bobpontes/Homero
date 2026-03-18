@@ -13,6 +13,7 @@
             <nav>
                 <a href="/">📚 Alunos</a>
                 <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
             </nav>
         </aside>
         
@@ -121,11 +122,17 @@
                                         {% endif %}
                                     </td>
                                     <td>
+                                        {% if m[4] != 'Pago' %}
+
                                         <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">✅</button>
                                         <form action="/mensalidade/remover/{{ m[0] }}" method="POST" style="display:inline">
                                             <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta mensalidade?')">🗑️</button>
                                         </form>     
                                         
+                                        {% else %}
+                                        <span style="opacity: 0.6;">✔️ Pago</span>
+
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
