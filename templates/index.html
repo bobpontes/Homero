@@ -2,56 +2,98 @@
 <html>
 <head>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
-    <title>Sistema Escolar Online</title>
+    <title>Homero — Sistema de Gestão Escolar</title>
 </head>
 <body>
-    <div class="container">
-        <header class="header">
-            <h1>Sistema Escolar Online 🚀</h1>
-            <p class="contador"> Total de alunos: {{ total }}</p>
-        </header>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
 
-        <section class="form-section card">
-            <h2>Cadastrar novo aluno</h2>
-            <form method="POST">
-                Nome: <input type="text" name="nome" placeholder="Nome" required><br>
-                Idade: <input type="number" name="idade" placeholder="Idade" required><br>
-                Turma: <input type="text" name="turma" placeholder="Turma" required><br>
-                <button type="submit">Cadastrar</button>
-            </form>
-        </section>
-        <section class="header">
-            <form method="GET" class="busca-form">
-                <input type="text" name="busca" placeholder="Buscar por um nome...">
-                <button type="submit">Buscar</button>
-            </form>
-        </section>
-        <section class="list-section">
-            
-            {% if sucesso %}
-                <div class="alert-success">✅ Aluno cadastrado com sucesso!
-                </div>
-            {% endif %}
-            
-            <h2>Lista de Alunos</h2>
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+            </nav>
+        </aside>
+        <main class="content">
+            <div class="container">
+                <header class="header">
+                    <h1>Homero — Sistema de Gestão Escolar</h1>
+                    <p class="contador"> Total de alunos: {{ total }}</p>
+                </header>
 
-            {% for aluno in alunos %}
-                <div class="card">
-                    <strong>{{ aluno[1] }}</strong><br>
-                    Idade: {{ aluno[2] }}<br>
-                    Turma: {{ aluno[3] }}<br><br>
+                <section class="form-section card">
+                    <h2>👤 Cadastrar novo aluno</h2>
+                    
+                    <form method="POST">
+                        <div class="form-grid">
 
-                    <a href="/editar/{{ aluno[0] }}" class="btn-edit">Editar</a>
+                            <div class="form-field">
+                                <label>Nome</label>
+                                <input type="text" name="nome" required>
+                            </div>
 
-                    <form action="/remover/{{ aluno[0] }}" method="POST"
-                    onsubmit="return confirm('Tem certeza que deseja remover este aluno?')">
-                        <button class="btn-delete">Remover</button>
-                </form>
+                            <div class="form-field">
+                                <label>Idade</label>
+                                <input type="number" name="idade" required>
+                            </div>
 
-                </div>
-            {% endfor %}
-        </section>
+                            <div class="form-field">
+                                <label>Turma</label>
+                                <input type="text" name="turma" required>
+                            </div>
 
+                        </div>
+
+                        <button class="btn-primary" type="submit">Cadastrar</button>
+                    </form>
+                </section>
+                
+                <section class="card">
+                    <h2>🔎 Procurar Aluno</h2>
+                    <form method="GET" class="busca-form">
+                        <input type="text" name="busca" placeholder="Buscar por um nome...">
+                        <button type="submit">Buscar</button>
+                    </form>
+                </section>
+                <section class="list-section">
+                    
+                    {% if sucesso %}
+                        <div class="alert-success">✅ Aluno cadastrado com sucesso!
+                        </div>
+                    {% endif %}
+                    <div class="card">
+                        <h2>👥 Lista de Alunos</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Idade</th>
+                                    <th>Turma</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for aluno in alunos %}
+                            <tr>
+                                <td>{{ aluno[1] }}</td>
+                                <td>{{ aluno[2] }}</td>
+                                <td>{{ aluno[3] }}</td>
+                                <td>
+                                    <a href="/editar/{{ aluno[0] }}" class="btn-edit">✏️ Editar</a>
+                                    <form method="POST" action="/remover/{{ aluno[0] }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja remover este aluno?')">
+                                        <button type="submit" class="btn-delete">🗑️ Remover</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </main>
     </div>    
 </body>
 </html>

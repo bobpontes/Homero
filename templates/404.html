@@ -2,15 +2,28 @@
 <html>
 <head>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
-    <title>Ops!</title>
+    <title>Homero — Ops!</title>
 </head>   
 <body>
-    <div class="container">
-        <h1>404</h1>
-        <h2>A página que você procura não foi encontrada!</h2>
-        <a href="/">
-            <button class="btn-back">Voltar</button>
-        </a>
-    </div>
+    <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+            </nav>
+        </aside>
+    <main class="content">
+        <div class="container">
+            <div class="card">
+                <h1>404</h1>
+                <h2>A página que você procura não foi encontrada!</h2>
+                <a href="/">
+                    <button class="btn-back">Voltar</button>
+                </a>
+            </div>
+        </div>
+    </main>
 </body> 
 </html>

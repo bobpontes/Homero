@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <title>Homero — Contas a Pagar</title>
+</head>
+<body>
+    <div class="layout">
+
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+            </nav>
+        </aside>
+        
+        <main class="content">
+            <div class="header">
+            <h1>💸 Contas a Pagar</h1>
+            </div>
+            
+            <div class="container">
+                    <!-- Dashboard do financeiro-->
+                    <section class="form-section card">
+                        <h2>💰 Resumo Financeiro</h2>
+                        <div>
+                            <h3>📊 Fluxo Financeiro</h3>
+                            <canvas id="graficoFinanceiro"></canvas>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <h2>Ações</h2>
+                        <button class="btn-pagar" onclick="abrirModalNova()">✚ Nova Conta</button>
+                    </section>
+                
+                    <section class="list-section">
+                        <div class="card">
+                            <h2>Despesas</h2>
+
+                            <table>
+                                <thead>
+                                <tr>
+                                    <th>Descrição</th>
+                                    <th>Plano de Contas</th>
+                                    <th>Fornecedor</th>
+                                    <th>Valor</th>
+                                    <th>Vencimento</th>
+                                    <th>Status</th>
+                                    <th>Dias de Atraso</th>
+                                    <th>Ações</th>
+                                </tr>
+                                </thead>
+                                
+                                <tbody>
+                                {% for c in contas %}
+                                <tr class="
+                                {% if c[4] == 'Vencido' %}linha-vencida
+                                {% elif c[4] == 'Pendente'%}linha-pendente
+                                {% else %}linha-paga
+                                {% endif %}
+                                ">
+                                    <td>{{ c[1] }}</td>
+                                    <td>{{ c[5] }}</td>
+                                    <td>{{ c[6] }}</td>
+                                    <td>R$ {{ "%.2f"|format(c[2]) }}</td>
+                                    <td>{{ c[3]|replace("-", "/") }}</td>
+                                    <td>{{ c[4] }}</td>
+                                    <td>{% if c[7] > 0 %}
+                                            {{ c[7] }} dias
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if c[4] != 'Pago' %}
+
+                                        <button class="btn-pagar" onclick="abrirModal({{ c[0] }})">💳</button>
+                                        <form action="/contas_pagar/remover/{{ c[0] }}" method="POST" style="display:inline">
+                                            <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta conta?')">🗑️</button>
+                                        </form>
+                                        
+                                        {% else %}
+
+                                        <span style="opacity: 0.6;">✔️ Pago</span>
+
+                                        {% endif %}
+
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+
+            <!-- Modal de Nova Conta a Pagar -->
+             <div id="modalNovaConta" class="modal">
+                <div class="modal-content">
+                    <h3>Nova Conta a Pagar</h3>
+
+                    <form method="POST" action="{{ url_for('nova_conta') }}">
+                        
+                        <div class="form-grid">
+                        
+                            <div class="form-field">
+                                <label>Descrição</label>
+                                <input type="text" name="descricao" placeholder="Ex: Conta de Energia mar/2026" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Plano de Contas</label>
+                                <select name="plano_conta_id" required>
+                                    {% for p in planos %}
+                                    <option value="{{ p[0] }}">{{ p[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Fornecedor</label>
+                                <select name="fornecedor_id" required>
+                                    {% for f in fornecedores %}
+                                    <option value="{{ f[0] }}">{{ f[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Valor</label>
+                                <input type="number" step="0.01" name="valor" min="0.01" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Data de vencimento</label>
+                                <input type="date" name="data_vencimento" value="{{ today }}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Parcelas</label>
+                                <input type="number" name="parcelas" min="1" value="1">
+                            </div>
+                        </div>
+
+                        <button class="btn-pagar" type="submit">➕ Criar Conta</button>
+                        <button class="btn-editar" type="button" onclick="fecharModalNova()">Cancelar</button>
+                    </form>
+                </div>
+             </div>
+
+            <!-- Modal de Pagamento --> 
+            <div id="modalPagamento" class="modal">
+                <div class="modal-content">
+
+                    <h3>Registrar Pagamento</h3>
+
+                    <form id="formPagamento" method="POST">
+
+                        <label>Data do pagamento</label>
+                        <input type="date" name="data_pagamento" required>
+
+                        <label>Método de pagamento</label>
+                        <select name="metodo_pagamento" required>
+                            <option value="pix">Pix</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Cartão">Cartão</option>
+                            <option value="Boleto">Boleto</option>
+                        </select>
+
+                        <button type="submit">Confirmar Pagamento</button>
+                        <button type="button" onclick="fecharModal()">Cancelar</button>
+                    </form>
+                        
+                </div>
+            </div>
+
+            <!-- JavaScript para fazer o Modal de Pagamento funcionar -->
+            <script>
+            
+            function abrirModal(id) {
+
+                const modal = document.getElementById("modalPagamento")
+                const form = document.getElementById("formPagamento")
+            
+                form.action = "/contas_pagar/pagar/"+ id
+
+                modal.style.display = "flex"
+            }
+
+            function fecharModal() {
+                document.getElementById("modalPagamento").style.display = "none"
+            }
+
+            function abrirModalNova() {
+                document.getElementById("modalNovaConta").style.display = "flex"
+            }
+
+            function fecharModalNova() {
+                document.getElementById("modalNovaConta").style.display = "none"
+            }
+            </script>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script>
+                const ctx = document.getElementById('graficoFinanceiro').getContext('2d');
+
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Receita', 'Despesa', 'Saldo'],
+                        datasets: [{
+                            label: 'Financeiro',
+                            data: [
+                                {{ receita_prevista|default(0) }},
+                                {{ despesa_prevista|default(0) }},
+                                {{ saldo_projetado|default(0) }}
+                            ],
+                            backgroundColor: [
+                                '#4CAF50',
+                                '#F44336',
+                                '#2196F3'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
+                    }
+                });
+            </script>
+        </main>
+    </div>
+</body>
+</html>
