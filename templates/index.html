@@ -24,13 +24,31 @@
 
                 <section class="form-section card">
                     <h2>👤 Cadastrar novo aluno</h2>
+                    
                     <form method="POST">
-                        Nome: <input type="text" name="nome" placeholder="Nome" required><br>
-                        Idade: <input type="number" name="idade" placeholder="Idade" required><br>
-                        Turma: <input type="text" name="turma" placeholder="Turma" required><br>
-                        <button type="submit">Cadastrar</button>
+                        <div class="form-grid">
+
+                            <div class="form-field">
+                                <label>Nome</label>
+                                <input type="text" name="nome" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Idade</label>
+                                <input type="number" name="idade" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Turma</label>
+                                <input type="text" name="turma" required>
+                            </div>
+
+                        </div>
+
+                        <button class="btn-primary" type="submit">Cadastrar</button>
                     </form>
                 </section>
+                
                 <section class="card">
                     <h2>🔎 Procurar Aluno</h2>
                     <form method="GET" class="busca-form">
@@ -64,7 +82,9 @@
                                 <td>{{ aluno[3] }}</td>
                                 <td>
                                     <a href="/editar/{{ aluno[0] }}" class="btn-edit">✏️ Editar</a>
-                                    <a href="/remover/{{ aluno[0] }}" class="btn-delete" onclick="return confirm('Tem certeza que deseja remover este aluno?')">🗑️ Remover</a>
+                                    <form method="POST" action="/remover/{{ aluno[0] }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja remover este aluno?')">
+                                        <button type="submit" class="btn-delete">🗑️ Remover</button>
+                                    </form>
                                 </td>
                             </tr>
                             {% endfor %}

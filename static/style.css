@@ -27,13 +27,16 @@ h2 {
 }
 
 .card {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    padding: 20px;
-    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    
+    padding: 24px;
+    border-radius: 18px;
+
+    border: 1px solid rgba(255, 255, 255, 0.4);
     box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+
     margin-bottom: 20px;
 }
 
@@ -44,12 +47,24 @@ h2 {
 }
 
 form input:not(.filtro-grid input) {
-    width: 95%;
-    padding: 10px;
+    width: 100%;
+    padding: 12px 14px;
     margin-bottom: 12px;
-    margin-right: 12px;
-    border-radius: 8px;
-    border: 1px solid #ddd;
+
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(6px);
+
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+form input:focus, select:focus {
+    outline: none;
+    border: 1px solid #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .form-section button {
@@ -84,12 +99,23 @@ form input:not(.filtro-grid input) {
 }
 
 button {
-    padding: 8px 12px;
+    padding: 10px 16px;
     border: none;
-    border-radius: 5px;
+    border-radius: 10px;
     cursor: pointer;
+    font-weight: 500;
     font-size: 14px;
     transition: all 0.2s ease;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-success {
+    background: #10b981;
+    color: white;
 }
 
 .btn-edit {
@@ -147,6 +173,14 @@ button:hover {
     transform: translateY(-1px);
 }
 
+button, .btn-edit, .btn-delete, .btn-pagar {
+    transition: all 0.2s ease;
+}
+
+button:hover, .btn-edit:hover, .btn-delete:hover, .btn-pagar:hover {
+    transform: translateY(-2px);
+}
+
 .contador {
     text-align: center;
     color: #7f8c8d;
@@ -188,14 +222,17 @@ button:hover {
 }
 
 .modal-content {
-    background: white;
-    padding: 25px;
-    border-radius: 10px;
-    width: 400px;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(18px);
 
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    padding: 30px;
+    border-radius: 16px;
+    width: 420px;
 
-    animation: aparecer 0.2s ease;
+    border: 1px solid rgba(255, 255, 255, 0.4)
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+
+    animation: aparecer 0.25s ease;
 }
 
 @keyframes aparecer {
@@ -269,7 +306,7 @@ button:hover {
 
 table {
     width: 100%;
-    border-collapse: separate;
+    border-collapse: collapse;
     border-spacing: 0;
     background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(4px);
@@ -443,8 +480,11 @@ canvas {
 }
 
 .btn-primary {
+    background: linear-gradient(135deg, #4f8cff, #3b82f6);
+    color: white;
     width: 200px;
     align-self: center;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .filtro-field {
@@ -469,18 +509,30 @@ canvas {
 .form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px
+    gap: 20px
 }
 
 .form-field {
     display: flex;
     flex-direction: column;
     font-weight: 500;
+    width: 100%;
+}
+
+.form-field input {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .form-field label {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 4px;
+}
+
+.form-grid .form-field:last-child {
+    grid-column: span 2;
 }
 
 .linha-vencida {
