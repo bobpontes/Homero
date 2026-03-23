@@ -859,14 +859,23 @@ def registrar_receita(id):
 
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
+    conta_bancaria_id = request.form.get("conta_bancaria_id")
 
-    if not data_pagamento or not metodo_pagamento:
-        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+    if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
+        abort(400, "Todos os dados são obrigatórios.")
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # Verificar se conta existe:
+    # 1) Verifica conta bancária:
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    conta_bancaria = cursor.fetchone()
+
+    if not conta_bancaria:
+        conn.close()
+        abort(400, "Conta bancária inválida.")
+
+    # 2) Verificar se conta existe:
     cursor.execute("SELECT id FROM contas_receber WHERE id = ?", (id, ))
     receita = cursor.fetchone()
 
@@ -874,7 +883,7 @@ def registrar_receita(id):
         conn.close()
         abort(404)
 
-    # Verificar se conta já está paga:
+    # 3) Verificar se conta já está paga:
     cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -882,9 +891,25 @@ def registrar_receita(id):
         conn.close()
         abort(400, "Recebimento já está pago.")
 
-    # Existe a conta, seguir com o pagamento:
-    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, id))
+    # 4) Atualizar saldo da conta bancária:
+    cursor.execute("SELECT valor FROM contas_receber WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    valor = resultado[0]
+    
+    cursor.execute("""
+        UPDATE contas_bancarias
+        SET saldo = saldo + ?
+        WHERE id = ?
+    """, (valor, conta_bancaria_id))
+
+    # 5) Existe a conta, seguir com o pagamento:
+    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
     conn.commit()
     conn.close()
 
