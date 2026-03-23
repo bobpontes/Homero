@@ -591,3 +591,13 @@ canvas {
     padding: 12px 14px;
     background: rgba(255, 255, 255, 0.95);
 }
+
+.saldo {
+    font-weight: 600;
+    color: #2ecc71;
+}
+
+.saldo-total {
+    font-weight: 600;
+    color: #2ecc71;
+}
