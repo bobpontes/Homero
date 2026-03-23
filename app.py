@@ -1,9 +1,10 @@
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for, abort
+from flask import Flask, request, render_template, redirect, url_for, abort, Response
 from datetime import datetime, timedelta, date
 import calendar
 import shutil
 import os
+import csv
 
 app = Flask(__name__)
 
@@ -109,6 +110,28 @@ def editar_aluno(id):
 
     conn.close()
     return render_template("editar.html", aluno=aluno)
+
+@app.route("/exportar/alunos")
+def exportar_alunos():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, nome, idade, turma FROM alunos ORDER BY nome")
+    alunos = cursor.fetchall()
+
+    conn.close()
+
+    def gerar_csv():
+        yield "ID,Nome,Idade,Turma\n"
+
+        for aluno in alunos:
+            yield f'"{aluno[0]}","{aluno[1]}","{aluno[2]}","{aluno[3]}"\n'
+
+    return Response(
+        gerar_csv(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=alunos.csv"}
+    )
 
 @app.route("/financeiro")
 def financeiro():
