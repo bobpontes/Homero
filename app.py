@@ -13,7 +13,9 @@ today = date.today().strftime("%Y-%m-%d")
 
 # função para chamar o banco de dados:
 def get_db():
-    return sqlite3.connect("escola.db")
+    conn = sqlite3.connect("escola.db")
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 @app.errorhandler(404)
 def pagina_nao_encontrada(e):
@@ -984,19 +986,6 @@ def criar_banco():
     ''')
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS mensalidades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            aluno_id INTEGER NOT NULL,
-            valor REAL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            metodo_pagamento TEXT,
-            FOREIGN KEY (aluno_id) REFERENCES alunos(id)
-        )
-    ''')
-
-    cursor.execute('''
     CREATE TABLE IF NOT EXISTS categorias_plano_contas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         codigo TEXT UNIQUE,
@@ -1012,25 +1001,6 @@ def criar_banco():
         nome TEXT NOT NULL,
         categoria_id INTEGER,
         FOREIGN KEY (categoria_id) REFERENCES categorias_plano_contas(id)
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS contas_pagar (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor REAL NOT NULL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            plano_conta_id INTEGER,
-            grupo_parcela_id INTEGER,
-            fornecedor_id INTEGER,
-            evento_id INTEGER,
-            metodo_pagamento TEXT,
-            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
-            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (evento_id) REFERENCES eventos(id)
         )
     ''')
 
@@ -1052,6 +1022,40 @@ def criar_banco():
     ''')
 
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS mensalidades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            aluno_id INTEGER NOT NULL,
+            valor REAL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            metodo_pagamento TEXT,
+            FOREIGN KEY (aluno_id) REFERENCES alunos(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contas_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            plano_conta_id INTEGER,
+            grupo_parcela_id INTEGER,
+            fornecedor_id INTEGER,
+            evento_id INTEGER,
+            metodo_pagamento TEXT,
+            conta_bancaria_id INTEGER,
+            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
+            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
+            FOREIGN KEY (evento_id) REFERENCES eventos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
+        )
+    ''')
+
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS contas_receber (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             descricao TEXT NOT NULL,
@@ -1063,9 +1067,12 @@ def criar_banco():
             grupo_parcela_id INTEGER,
             fornecedor_id INTEGER,
             evento_id INTEGER,
+            metodo_pagamento TEXT,
+            conta_bancaria_id INTEGER,
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
             FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (evento_id) REFERENCES eventos(id)
+            FOREIGN KEY (evento_id) REFERENCES eventos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
         )
     ''')
 
