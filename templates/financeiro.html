@@ -204,6 +204,14 @@
                             <option value="Boleto">Boleto</option>
                         </select>
 
+                        <label>Conta Bancária</label>
+                        <select name="conta_bancaria_id" required>
+                            <option value="">Selecione uma conta</option>
+                            {% for conta in contas_banco %}
+                            <option value="{{ conta[0] }}">{{ conta[1] }}</option>
+                            {% endfor %}
+                        </select>
+
                             <br><br>
 
                             <button type="submit">Confirmar Pagamento</button>

@@ -263,6 +263,10 @@ def financeiro():
     # Saldo Projetado
     saldo_projetado = receita_prevista - despesa_prevista
 
+    # Contas Bancárias
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1")
+    contas_banco = cursor.fetchall()
+
     conn.close()
 
     return render_template(
@@ -277,6 +281,7 @@ def financeiro():
         receita_prevista=receita_prevista,
         despesa_prevista=despesa_prevista,
         saldo_projetado=saldo_projetado,
+        contas_banco=contas_banco,
         mes=mes
     )
 
@@ -392,7 +397,13 @@ def registrar_pagamento(id):
     
     # Antes de atualizar mensalidade, atualizar o saldo bancário:
     cursor.execute("SELECT valor FROM mensalidades WHERE id = ?", (id, ))
-    valor = cursor.fetchone()[0]
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    valor = resultado[0]
 
     cursor.execute("""
         UPDATE contas_bancarias
@@ -1093,7 +1104,9 @@ def criar_banco():
             status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
             data_pagamento TEXT,
             metodo_pagamento TEXT,
-            FOREIGN KEY (aluno_id) REFERENCES alunos(id)
+            conta_bancaria_id INTEGER,
+            FOREIGN KEY (aluno_id) REFERENCES alunos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
         )
     ''')
 
