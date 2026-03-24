@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
-    <title>Homero — Contas a Pagar</title>
+    <title>Homero — Contas a Receber</title>
 </head>
 <body>
     <div class="layout">
@@ -21,7 +21,7 @@
         
         <main class="content">
             <div class="header">
-            <h1>💸 Contas a Pagar</h1>
+            <h1>💵 Contas a Receber</h1>
             </div>
             
             <div class="container">
@@ -41,14 +41,14 @@
                 
                     <section class="list-section">
                         <div class="card">
-                            <h2>Despesas</h2>
+                            <h2>Recebimentos</h2>
 
                             <table>
                                 <thead>
                                 <tr>
                                     <th>Descrição</th>
                                     <th>Plano de Contas</th>
-                                    <th>Fornecedor</th>
+                                    <th>Cliente</th>
                                     <th>Valor</th>
                                     <th>Vencimento</th>
                                     <th>Status</th>
@@ -58,30 +58,30 @@
                                 </thead>
                                 
                                 <tbody>
-                                {% for c in contas %}
+                                {% for r in receitas %}
                                 <tr class="
-                                {% if c[4] == 'Vencido' %}linha-vencida
-                                {% elif c[4] == 'Pendente'%}linha-pendente
+                                {% if r[4] == 'Vencido' %}linha-vencida
+                                {% elif r[4] == 'Pendente'%}linha-pendente
                                 {% else %}linha-paga
                                 {% endif %}
                                 ">
-                                    <td>{{ c[1] }}</td>
-                                    <td>{{ c[5] }}</td>
-                                    <td>{{ c[6] }}</td>
-                                    <td>R$ {{ "%.2f"|format(c[2]) }}</td>
-                                    <td>{{ c[3]|replace("-", "/") }}</td>
-                                    <td>{{ c[4] }}</td>
-                                    <td>{% if c[7] > 0 %}
-                                            {{ c[7] }} dias
+                                    <td>{{ r[1] }}</td>
+                                    <td>{{ r[5] }}</td>
+                                    <td>{{ r[6] }}</td>
+                                    <td>R$ {{ "%.2f"|format(r[2]) }}</td>
+                                    <td>{{ r[3]|replace("-", "/") }}</td>
+                                    <td>{{ r[4] }}</td>
+                                    <td>{% if r[7] > 0 %}
+                                            {{ r[7] }} dias
                                         {% else %}
                                             —
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if c[4] != 'Pago' %}
+                                        {% if r[4] != 'Pago' %}
 
-                                        <button class="btn-pagar" onclick="abrirModal({{ c[0] }})">💳</button>
-                                        <form action="/contas_pagar/remover/{{ c[0] }}" method="POST" style="display:inline">
+                                        <button class="btn-pagar" onclick="abrirModal({{ r[0] }})">💳</button>
+                                        <form action="/contas_receber/remover/{{ r[0] }}" method="POST" style="display:inline">
                                             <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta conta?')">🗑️</button>
                                         </form>
                                         
@@ -100,18 +100,18 @@
                     </section>
                 </div>
 
-            <!-- Modal de Nova Conta a Pagar -->
+            <!-- Modal de Nova Conta a Receber -->
              <div id="modalNovaConta" class="modal">
                 <div class="modal-content">
-                    <h3>Nova Conta a Pagar</h3>
+                    <h3>Nova Conta a Receber</h3>
 
-                    <form method="POST" action="{{ url_for('nova_conta') }}">
+                    <form method="POST" action="{{ url_for('nova_receita') }}">
                         
                         <div class="form-grid">
                         
                             <div class="form-field">
                                 <label>Descrição</label>
-                                <input type="text" name="descricao" placeholder="Ex: Conta de Energia mar/2026" required>
+                                <input type="text" name="descricao" placeholder="Ex: Inscrição Colônia de Férias jul/2026" required>
                             </div>
 
                             <div class="form-field">
@@ -124,7 +124,7 @@
                             </div>
 
                             <div class="form-field">
-                                <label>Fornecedor</label>
+                                <label>Cliente</label>
                                 <select name="fornecedor_id" required>
                                     {% for f in fornecedores %}
                                     <option value="{{ f[0] }}">{{ f[1] }}</option>
@@ -147,9 +147,11 @@
                                 <input type="number" name="parcelas" min="1" value="1">
                             </div>
                         </div>
-
-                        <button class="btn-pagar" type="submit">➕ Criar Conta</button>
-                        <button class="btn-editar" type="button" onclick="fecharModalNova()">Cancelar</button>
+                        <div class="modal-actions">
+                            <button class="btn-primary" type="submit">➕ Criar Conta</button>
+                            <button class="btn-secondary" type="button" onclick="fecharModalNova()">Cancelar</button>
+                        </div>
+                        
                     </form>
                 </div>
              </div>
@@ -158,31 +160,39 @@
             <div id="modalPagamento" class="modal">
                 <div class="modal-content">
 
-                    <h3>Registrar Pagamento</h3>
+                    <h3>Registrar Recebimento</h3>
 
                     <form id="formPagamento" method="POST">
-
-                        <label>Data do pagamento</label>
-                        <input type="date" name="data_pagamento" required>
-
-                        <label>Método de pagamento</label>
-                        <select name="metodo_pagamento" required>
-                            <option value="pix">Pix</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="Cartão">Cartão</option>
-                            <option value="Boleto">Boleto</option>
-                        </select>
-
-                        <label>Conta Bancária</label>
-                        <select name="conta_bancaria_id" required>
-                            <option value="">Selecione uma conta</option>
-                            {% for conta in contas_banco %}
-                            <option value="{{ conta[0] }}">{{ conta[1] }}</option>
-                            {% endfor %}
-                        </select>
-
-                        <button type="submit">Confirmar Pagamento</button>
-                        <button type="button" onclick="fecharModal()">Cancelar</button>
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Data do pagamento</label>
+                                <input type="date" name="data_pagamento" required>
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Método de pagamento</label>
+                                <select name="metodo_pagamento" required>
+                                    <option value="pix">Pix</option>
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="Cartão">Cartão</option>
+                                    <option value="Boleto">Boleto</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Conta Bancária</label>
+                                <select name="conta_bancaria_id" required>
+                                    <option value="">Selecione uma conta</option>
+                                    {% for conta in contas_banco %}
+                                    <option value="{{ conta[0] }}">{{ conta[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn-primary" type="submit">Confirmar Pagamento</button>
+                            <button class="btn-secondary"type="button" onclick="fecharModal()">Cancelar</button>
+                        </div>
                     </form>
                         
                 </div>
@@ -196,7 +206,7 @@
                 const modal = document.getElementById("modalPagamento")
                 const form = document.getElementById("formPagamento")
             
-                form.action = "/contas_pagar/pagar/"+ id
+                form.action = "/contas_receber/receber/"+ id
 
                 modal.style.display = "flex"
             }
