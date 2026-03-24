@@ -13,7 +13,9 @@ today = date.today().strftime("%Y-%m-%d")
 
 # função para chamar o banco de dados:
 def get_db():
-    return sqlite3.connect("escola.db")
+    conn = sqlite3.connect("escola.db")
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 @app.errorhandler(404)
 def pagina_nao_encontrada(e):
@@ -261,6 +263,10 @@ def financeiro():
     # Saldo Projetado
     saldo_projetado = receita_prevista - despesa_prevista
 
+    # Contas Bancárias
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1")
+    contas_banco = cursor.fetchall()
+
     conn.close()
 
     return render_template(
@@ -275,6 +281,7 @@ def financeiro():
         receita_prevista=receita_prevista,
         despesa_prevista=despesa_prevista,
         saldo_projetado=saldo_projetado,
+        contas_banco=contas_banco,
         mes=mes
     )
 
@@ -356,14 +363,23 @@ def registrar_pagamento(id):
 
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
+    conta_bancaria_id = request.form.get("conta_bancaria_id")
 
-    if not data_pagamento or not metodo_pagamento:
-        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+    if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
+        abort(400, "Todos os campos são obrigatórios.")
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # Primeiro: verificar se a mensalidade existe
+    # Primeiro: verificar se conta bancária existe:
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    conta_bancaria = cursor.fetchone()
+
+    if not conta_bancaria:
+        conn.close()
+        abort(400, "Uma conta bancária inválida foi selecionada.")
+
+    # Segundo: verificar se a mensalidade existe
     cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
     mensalidade = cursor.fetchone()
 
@@ -371,7 +387,7 @@ def registrar_pagamento(id):
         conn.close()
         abort(404)
 
-    # Segundo: verificar se a mensalidade ainda não foi paga
+    # Terceiro: verificar se a mensalidade ainda não foi paga
     cursor.execute("SELECT status FROM mensalidades WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -379,9 +395,25 @@ def registrar_pagamento(id):
         conn.close()
         abort(400, "Não é possível registrar o pagamento, a mensalidade já havia sido paga.")
     
+    # Antes de atualizar mensalidade, atualizar o saldo bancário:
+    cursor.execute("SELECT valor FROM mensalidades WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    valor = resultado[0]
+
+    cursor.execute("""
+        UPDATE contas_bancarias
+        SET saldo = saldo + ?
+        WHERE id = ?
+    """, (valor, conta_bancaria_id))
+
     # Se existir e não tiver sido paga, registrar pagamento:
-    cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""", 
-                   (data_pagamento, metodo_pagamento,id))
+    cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""", 
+                   (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
     conn.commit()
     conn.close()
 
@@ -573,23 +605,35 @@ def contas_pagar():
     cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
     fornecedores = cursor.fetchall()
 
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
+    contas_banco = cursor.fetchall()
+
     conn.close()
 
-    return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, fornecedores=fornecedores, today=today)
+    return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, fornecedores=fornecedores, today=today, contas_banco=contas_banco)
 
 @app.route("/contas_pagar/pagar/<int:id>", methods=["POST"])
 def registrar_conta(id):
 
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
+    conta_bancaria_id = request.form.get("conta_bancaria_id")
 
-    if not data_pagamento or not metodo_pagamento:
-        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+    if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
+        abort(400, "Todos os dados são obrigatórios.")
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # Verificar se conta existe:
+    # 1) Verifica se a conta bancária existe:
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    conta_bancaria = cursor.fetchone()
+
+    if not conta_bancaria:
+        conn.close()
+        abort(400, "Conta bancária inválida, pagamento não registrado.")
+
+    # 2) Verificar se conta existe:
     cursor.execute("SELECT id FROM contas_pagar WHERE id = ?", (id, ))
     conta = cursor.fetchone()
 
@@ -597,7 +641,7 @@ def registrar_conta(id):
         conn.close()
         abort(404)
 
-    # Verificar se conta já está paga:
+    # 3) Verificar se conta já está paga:
     cursor.execute("SELECT status FROM contas_pagar WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -605,9 +649,19 @@ def registrar_conta(id):
         conn.close()
         abort(400, "Conta já está paga.")
 
-    # Existe a conta, seguir com o pagamento:
-    cursor.execute("""UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, id))
+    # 4) Registrar atualização no Saldo da conta bancária:
+    cursor.execute("SELECT valor FROM contas_pagar WHERE id = ?", (id, ))
+    valor = cursor.fetchone()[0]
+
+    cursor.execute("""
+        UPDATE contas_bancarias
+        SET saldo = saldo - ?
+        WHERE id = ?
+    """, (valor, conta_bancaria_id))
+
+    # 5) Seguir com o pagamento:
+    cursor.execute("""UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
     conn.commit()
     conn.close()
 
@@ -729,9 +783,12 @@ def contas_receber():
     cursor.execute("SELECT id, nome FROM plano_contas ORDER BY nome")
     planos = cursor.fetchall()
 
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
+    contas_banco = cursor.fetchall()
+
     conn.close()
 
-    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today)
+    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today, contas_banco=contas_banco)
 
 @app.route("/receita/nova", methods=["POST"])
 def nova_receita():
@@ -819,14 +876,23 @@ def registrar_receita(id):
 
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
+    conta_bancaria_id = request.form.get("conta_bancaria_id")
 
-    if not data_pagamento or not metodo_pagamento:
-        abort(400, "Data de pagamento e método de pagamento são obrigatórios.")
+    if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
+        abort(400, "Todos os dados são obrigatórios.")
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # Verificar se conta existe:
+    # 1) Verifica conta bancária:
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    conta_bancaria = cursor.fetchone()
+
+    if not conta_bancaria:
+        conn.close()
+        abort(400, "Conta bancária inválida.")
+
+    # 2) Verificar se conta existe:
     cursor.execute("SELECT id FROM contas_receber WHERE id = ?", (id, ))
     receita = cursor.fetchone()
 
@@ -834,7 +900,7 @@ def registrar_receita(id):
         conn.close()
         abort(404)
 
-    # Verificar se conta já está paga:
+    # 3) Verificar se conta já está paga:
     cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -842,9 +908,25 @@ def registrar_receita(id):
         conn.close()
         abort(400, "Recebimento já está pago.")
 
-    # Existe a conta, seguir com o pagamento:
-    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, id))
+    # 4) Atualizar saldo da conta bancária:
+    cursor.execute("SELECT valor FROM contas_receber WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    valor = resultado[0]
+    
+    cursor.execute("""
+        UPDATE contas_bancarias
+        SET saldo = saldo + ?
+        WHERE id = ?
+    """, (valor, conta_bancaria_id))
+
+    # 5) Existe a conta, seguir com o pagamento:
+    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
     conn.commit()
     conn.close()
 
@@ -906,6 +988,60 @@ def remover_grupo_receita(grupo_id):
 
     return redirect(url_for("contas_receber"))
 
+@app.route("/contas_bancarias")
+def contas_bancarias():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM contas_bancarias ORDER BY saldo DESC")
+    contas_banco = cursor.fetchall()
+
+    cursor.execute("SELECT SUM(saldo) FROM contas_bancarias")
+    resultado = cursor.fetchone()
+    saldo_total_contas = resultado[0] if resultado and resultado[0] else 0
+
+    conn.close()
+
+    return render_template("contas_bancarias.html", contas_banco=contas_banco, saldo_total_contas=saldo_total_contas)
+
+@app.route("/contas_bancarias/nova", methods=["POST"])
+def nova_conta_bancaria():
+
+    nome = request.form.get("nome")
+    tipo = request.form.get("tipo") or "outro"
+    saldo = request.form.get("saldo")
+    ativo = 1 if request.form.get("ativo") else 0
+
+    if not nome:
+        abort(400, "Nome da conta é obrigatório.")
+
+    try:
+        saldo = float(saldo)
+    except (TypeError, ValueError):
+        abort(400, "Valor inválido para saldo inicial.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT nome FROM contas_bancarias WHERE nome = ?", (nome, ))
+    conta_existente = cursor.fetchone()
+
+    if conta_existente:
+        conn.close()
+        abort(400, "Esta conta já foi registrada em nosso sistema.")    
+    
+    cursor.execute(
+        "INSERT INTO contas_bancarias (nome, tipo, saldo, ativo) VALUES (?, ?, ?, ?)",
+        (nome, tipo, saldo, ativo)
+    )
+    
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("contas_bancarias"))
+    
+
 def criar_banco():
     conn = get_db()
     cursor = conn.cursor()
@@ -920,15 +1056,12 @@ def criar_banco():
     ''')
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS mensalidades (
+        CREATE TABLE IF NOT EXISTS contas_bancarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            aluno_id INTEGER NOT NULL,
-            valor REAL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            metodo_pagamento TEXT,
-            FOREIGN KEY (aluno_id) REFERENCES alunos(id)
+            nome TEXT NOT NULL,
+            tipo TEXT,
+            saldo REAL DEFAULT 0,
+            ativo BOOLEAN DEFAULT 1
         )
     ''')
 
@@ -952,25 +1085,6 @@ def criar_banco():
     ''')
 
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS contas_pagar (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor REAL NOT NULL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            plano_conta_id INTEGER,
-            grupo_parcela_id INTEGER,
-            fornecedor_id INTEGER,
-            evento_id INTEGER,
-            metodo_pagamento TEXT,
-            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
-            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (evento_id) REFERENCES eventos(id)
-        )
-    ''')
-
-    cursor.execute('''
         CREATE TABLE IF NOT EXISTS fornecedores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
@@ -988,6 +1102,42 @@ def criar_banco():
     ''')
 
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS mensalidades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            aluno_id INTEGER NOT NULL,
+            valor REAL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            metodo_pagamento TEXT,
+            conta_bancaria_id INTEGER,
+            FOREIGN KEY (aluno_id) REFERENCES alunos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS contas_pagar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descricao TEXT NOT NULL,
+            valor REAL NOT NULL,
+            data_vencimento TEXT,
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
+            data_pagamento TEXT,
+            plano_conta_id INTEGER,
+            grupo_parcela_id INTEGER,
+            fornecedor_id INTEGER,
+            evento_id INTEGER,
+            metodo_pagamento TEXT,
+            conta_bancaria_id INTEGER,
+            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
+            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
+            FOREIGN KEY (evento_id) REFERENCES eventos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
+        )
+    ''')
+
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS contas_receber (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             descricao TEXT NOT NULL,
@@ -999,9 +1149,12 @@ def criar_banco():
             grupo_parcela_id INTEGER,
             fornecedor_id INTEGER,
             evento_id INTEGER,
+            metodo_pagamento TEXT,
+            conta_bancaria_id INTEGER,
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
             FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (evento_id) REFERENCES eventos(id)
+            FOREIGN KEY (evento_id) REFERENCES eventos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
         )
     ''')
 

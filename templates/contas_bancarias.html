@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <title>Homero — Contas Bancárias</title>
+</head>
+<body>
+    <div class="layout">
+
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+            </nav>
+        </aside>
+        
+        <main class="content">
+            <div class="header">
+            <h1>🏦 Contas Bancárias</h1>
+            </div>
+            
+            <div class="container">
+                <div class="card">    
+                    <section class="list-section">
+                        <h2>Resumo das Contas</h2>
+                        {% if (saldo_total_contas < 0) %}
+                            <h3 class="saldo-total negativo">Total: R$ {{ "%.2f"|format(saldo_total_contas) }}</h3>
+                        {% else %}
+                            <h3 class="saldo-total">Total: R$ {{ "%.2f"|format(saldo_total_contas) }}</h3>
+                        {% endif %}
+                        <div>
+                            {% if contas_banco %}
+                                <table>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th>Tipo</th>
+                                        <th>Saldo</th>
+                                        <th>Status</th>
+                                    </tr>
+
+                                    {% for conta in contas_banco %}
+                                    <tr>
+                                        <td>{{ conta[1] }}</td>
+                                        <td><span class="badge">{{ conta[2] }}</span></td>
+                                        {% if (conta[3] < 0) %}
+                                            <td class="saldo negativo">R$ {{ "%.2f"|format(conta[3]) }}</td>
+                                        {% else %}
+                                        <td class="saldo">R$ {{ "%.2f"|format(conta[3]) }}</td>
+                                        {% endif %}
+                                        <td>{% if conta[4] == 1 %}
+                                                🟢 Ativa
+                                            {% else %}
+                                                🔴 Inativa
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            {% else %}
+                                <p>Nenhuma conta cadastrada ainda.</p>
+                            {% endif %}
+                        </div>
+                        <br><br>
+                        <div class="card">
+                            <h3>Ações</h3>
+                            <button class="btn-primary" onclick="abrirModal()">➕ Adicionar Conta</button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+            
+            <!-- Modal de Conta Bancária --> 
+            <div id="modalBank" class="modal">
+                <div class="modal-content">
+
+                    <h3>🏦 Nova Conta Bancária</h3>
+
+                    <form id="formBank" method="POST">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Nome</label>
+                                <input type="text" name="nome" required>
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Tipo</label>
+                                <select name="tipo" required>
+                                    <option value="banco">Banco</option>
+                                    <option value="caixa">Caixa</option>
+                                    <option value="digital">Digital</option>
+                                    <option value="cartao">Cartão de Crédito</option>
+                                    <option value="aplicacao">Aplicação</option>
+                                    <option value="transitoria">Transitória</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Saldo Inicial</label>
+                                <input type="number" step="0.01" name="saldo" required>
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Status</label>
+                                <select name="ativo" required>
+                                    <option value="1">Ativa</option>
+                                    <option value="0">Inativa</option>
+                                </select>
+                            </div>
+                        </div>    
+                        
+                        <div class="form-actions">
+                            <button class="btn-primary" type="submit">➕ Adicionar Conta</button>
+                            <button class="btn-secondary" type="button" onclick="fecharModal()">Cancelar</button>
+                        </div>
+                    </form>
+                        
+                </div>
+            </div>
+
+            <!-- JavaScript para fazer o Modal de contas bancárias funcionar -->
+            <script>
+            
+            function abrirModal() {
+
+                const modal = document.getElementById("modalBank")
+                const form = document.getElementById("formBank")
+            
+                form.action = "/contas_bancarias/nova"
+
+                modal.style.display = "flex"
+            }
+
+            function fecharModal() {
+                document.getElementById("modalBank").style.display = "none"
+            }
+            </script>
+        </main>
+    </div>
+</body>
+</html>
