@@ -783,9 +783,12 @@ def contas_receber():
     cursor.execute("SELECT id, nome FROM plano_contas ORDER BY nome")
     planos = cursor.fetchall()
 
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
+    contas_banco = cursor.fetchall()
+
     conn.close()
 
-    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today)
+    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today, contas_banco=contas_banco)
 
 @app.route("/receita/nova", methods=["POST"])
 def nova_receita():
