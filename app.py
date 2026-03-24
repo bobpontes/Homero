@@ -605,9 +605,12 @@ def contas_pagar():
     cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
     fornecedores = cursor.fetchall()
 
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
+    contas_banco = cursor.fetchall()
+
     conn.close()
 
-    return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, fornecedores=fornecedores, today=today)
+    return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, fornecedores=fornecedores, today=today, contas_banco=contas_banco)
 
 @app.route("/contas_pagar/pagar/<int:id>", methods=["POST"])
 def registrar_conta(id):
