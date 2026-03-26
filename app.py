@@ -11,11 +11,49 @@ app = Flask(__name__)
 # Data de hoje
 today = date.today().strftime("%Y-%m-%d")
 
+# Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
+def adicionar_meses(data_base, meses):
+    dia_original = data_base.day
+
+    mes = data_base.month -1 + meses
+    ano = data_base.year + mes // 12
+    mes = mes % 12 + 1
+    
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+
+    # mantém o mesmo dia sempre que possível
+    dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
+    return date(ano, mes, dia)
+
+
 # função para chamar o banco de dados:
 def get_db():
     conn = sqlite3.connect("escola.db")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+# helper para aplicação de filtro no sql:
+def aplicar_condicao(filtro_sql, condicao):
+    if filtro_sql:
+        return filtro_sql + " AND " + condicao
+    else:
+        return "WHERE " + condicao
+
+# Formatar mês por extenso em pt-BR:
+meses = {
+    "01": "Janeiro",
+    "02": "Fevereiro",
+    "03": "Março",
+    "04": "Abril",
+    "05": "Maio",
+    "06": "Junho",
+    "07": "Julho",
+    "08": "Agosto",
+    "09": "Setembro",
+    "10": "Outubro",
+    "11": "Novembro",
+    "12": "Dezembro"
+}
 
 @app.errorhandler(404)
 def pagina_nao_encontrada(e):
@@ -284,20 +322,6 @@ def financeiro():
         contas_banco=contas_banco,
         mes=mes
     )
-
-def adicionar_meses(data_base, meses):
-    dia_original = data_base.day
-
-    mes = data_base.month -1 + meses
-    ano = data_base.year + mes // 12
-    mes = mes % 12 + 1
-    
-    ultimo_dia = calendar.monthrange(ano, mes)[1]
-
-    # mantém o mesmo dia sempre que possível
-    dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
-    return date(ano, mes, dia)
-
 
 @app.route("/mensalidade/nova", methods=["POST"])
 def nova_mensalidade():
@@ -726,10 +750,44 @@ def remover_grupo_conta(grupo_id):
 @app.route("/contas_receber")
 def contas_receber():
 
+    # Filtro para dados
+    mes = request.args.get("mes") or None
+    ano = request.args.get("ano") or None
+    data_inicio = request.args.get("data_inicio") or None
+    data_fim = request.args.get("data_fim") or None
+
+    filtro_sql = ""
+    parametros = ()
+
+    if data_inicio and data_fim:
+        filtro_sql = "WHERE date(contas_receber.data_vencimento) BETWEEN date(?) AND date(?)"
+        parametros = (data_inicio, data_fim)
+        
+        mes1 = meses[data_inicio[5:7]]
+        mes2 = meses[data_fim[5:7]]
+
+        periodo_formatado = (
+            f"{data_inicio[8:10]} {mes1[:3]} {data_inicio[0:4]} "
+            f"até {data_fim[8:10]} {mes2[:3]} {data_fim[0:4]}"
+        )
+
+    elif ano:
+        filtro_sql = "WHERE strftime('%Y', contas_receber.data_vencimento) = ?"
+        parametros = (ano, )
+        periodo_formatado = f"Ano de {ano}"
+
+    else:
+        if not mes:
+            mes = date.today().strftime("%Y-%m")
+            
+        filtro_sql = "WHERE strftime('%Y-%m', contas_receber.data_vencimento) = ?"
+        parametros = (mes, )
+        periodo_formatado = f"{meses[mes[5:7]]}/{mes[0:4]}"
+
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    query = f"""
         SELECT contas_receber.id,
             contas_receber.descricao,
             contas_receber.valor,
@@ -748,6 +806,7 @@ def contas_receber():
             ON contas_receber.plano_conta_id = plano_contas.id
         LEFT JOIN fornecedores
             ON contas_receber.fornecedor_id = fornecedores.id
+        {filtro_sql}
         ORDER BY
             CASE
                 WHEN contas_receber.status = 'pendente'
@@ -757,7 +816,8 @@ def contas_receber():
             END,
             contas_receber.data_vencimento ASC
                 
-""")
+    """
+    cursor.execute(query, parametros)
     
     receitas = cursor.fetchall()
 
@@ -777,6 +837,93 @@ def contas_receber():
 
     receitas = receitas_com_atraso
 
+    # Preparação dos filtros para queries agregadas:
+    filtro_receber = filtro_sql
+    filtro_mensalidades = filtro_sql.replace("contas_receber", "mensalidades")
+    filtro_pagar = filtro_sql.replace("contas_receber", "contas_pagar")
+
+    filtro_receber_status = aplicar_condicao(filtro_receber, "status = 'pendente'")
+    filtro_receber_vencidas = aplicar_condicao(filtro_receber, "status = 'pendente' AND date(data_vencimento) < date('now')")
+    filtro_receber_pago = aplicar_condicao(filtro_receber, "status = 'pago'")
+
+    # Gráfico do Dashboard
+    # Receitas e Mensalidades
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM contas_receber
+    {filtro_receber}
+    """, parametros)
+    resultado_c_receber = cursor.fetchone()
+    total_contas_receber = resultado_c_receber[0] if resultado_c_receber and resultado_c_receber[0] else 0.0
+    total_receitas = total_contas_receber
+
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM mensalidades
+    {filtro_mensalidades}
+    """, parametros)
+    resultado_mensalidades = cursor.fetchone()
+    total_contas_mensalidades = resultado_mensalidades[0] if resultado_mensalidades and resultado_mensalidades[0] else 0.0
+    total_mensalidades = total_contas_mensalidades
+
+    receita_total = total_receitas + total_mensalidades
+
+    # Despesas
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM contas_pagar
+    {filtro_pagar}
+    """, parametros)
+    resultado_c_pagar = cursor.fetchone()
+    total_despesas = resultado_c_pagar[0] if resultado_c_pagar and resultado_c_pagar[0] else 0.0
+
+    despesa_total = total_despesas
+
+    # Soldo Projetado
+    saldo_total = receita_total - despesa_total
+
+    # Índices do Dashboard (de acordo com o filtro solicitado)
+    # Contas a receber pendentes que estão vencidas
+    cursor.execute(f"""
+    SELECT COUNT(*)
+    FROM contas_receber
+    {filtro_receber_vencidas}
+    """, parametros)
+    resultado_qtdd_vencidas = cursor.fetchone()
+    total_vencidas = resultado_qtdd_vencidas[0] if resultado_qtdd_vencidas and resultado_qtdd_vencidas[0] else 0
+    parcelas_vencidas = total_vencidas
+
+    # Contas a receber pendentes (ainda não vencidas)
+    cursor.execute(f"""
+    SELECT COUNT(*)
+    FROM contas_receber
+    {filtro_receber_status}
+    """, parametros)
+    resultado_qtdd_pendentes = cursor.fetchone()
+    total_pendentes = resultado_qtdd_pendentes[0] if resultado_qtdd_pendentes and resultado_qtdd_pendentes[0] else 0
+    parcelas_pendentes = total_pendentes - total_vencidas
+
+    # Contas a receber pagas
+    cursor.execute(f"""
+    SELECT COUNT(*)
+    FROM contas_receber
+    {filtro_receber_pago}
+    """, parametros)
+    resultado_qtdd_pagas = cursor.fetchone()
+    total_pagas = resultado_qtdd_pagas[0] if resultado_qtdd_pagas and resultado_qtdd_pagas[0] else 0
+    parcelas_pagas = total_pagas
+
+    # Retorna o valor total vencido e pendente (Valor total em aberto)
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM contas_receber
+    {filtro_receber_status}
+    """, parametros)
+    resultado_receitas_pendente = cursor.fetchone()
+    total_receitas_pendentes = resultado_receitas_pendente[0] if resultado_receitas_pendente and resultado_receitas_pendente[0] else 0.0 # Se for None, retorna 0.0
+    total_aberto = total_receitas_pendentes
+        
+
     cursor.execute("SELECT id, nome FROM categorias_plano_contas ORDER BY nome")
     categorias = cursor.fetchall()
 
@@ -791,7 +938,23 @@ def contas_receber():
 
     conn.close()
 
-    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today, fornecedores=fornecedores, contas_banco=contas_banco)
+    return render_template("contas_receber.html",
+        mes=mes,
+        periodo_formatado=periodo_formatado,
+        receitas=receitas,
+        receita_total=receita_total,
+        despesa_total=despesa_total,
+        saldo_total=saldo_total,
+        parcelas_vencidas=parcelas_vencidas,
+        parcelas_pendentes=parcelas_pendentes,
+        parcelas_pagas=parcelas_pagas,
+        total_aberto=total_aberto,
+        categorias=categorias,
+        planos=planos,
+        today=today,
+        fornecedores=fornecedores,
+        contas_banco=contas_banco
+    )
 
 @app.route("/contas_receber/nova", methods=["POST"])
 def nova_receita():
