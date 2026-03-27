@@ -419,7 +419,7 @@ def registrar_pagamento(id):
         conn.close()
         abort(400, "Não é possível registrar o pagamento, a mensalidade já havia sido paga.")
     
-    # Antes de atualizar mensalidade, atualizar o saldo bancário:
+    # 4) Segurança: conferir o valor da mensalidade:
     cursor.execute("SELECT valor FROM mensalidades WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -429,16 +429,52 @@ def registrar_pagamento(id):
 
     valor = resultado[0]
 
-    cursor.execute("""
-        UPDATE contas_bancarias
-        SET saldo = saldo + ?
-        WHERE id = ?
-    """, (valor, conta_bancaria_id))
+    try:
+        # 5) Registrar o pagamento da conta:
+        cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""", 
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
 
-    # Se existir e não tiver sido paga, registrar pagamento:
-    cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""", 
-                   (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
-    conn.commit()
+        # 6) Atualizar tabela movimentacoes_bancarias:
+        cursor.execute("""
+            SELECT alunos.nome
+            FROM mensalidades
+            JOIN alunos ON mensalidades.aluno_id = alunos.id
+            WHERE mensalidades.id = ?
+        """, (id, ))
+        resultado_nome = cursor.fetchone()
+
+        if not resultado_nome:
+            conn.rollback()
+            abort(500, "Erro ao obter nome do aluno.")
+
+        nome_aluno = resultado_nome[0]
+
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+                       (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+                       VALUES (?, 'entrada', ?, ?, 'mensalidade', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_pagamento,
+            id,
+            f"Mensalidade - {nome_aluno} - Parcela ID {id}"
+        ))
+
+        # 7) Atualizar saldo da conta bancária:
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo + ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+        
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+    
     conn.close()
 
     return redirect(url_for("financeiro"))
@@ -673,20 +709,50 @@ def registrar_conta(id):
         conn.close()
         abort(400, "Conta já está paga.")
 
-    # 4) Registrar atualização no Saldo da conta bancária:
+    # 4) Segurança: conferir valor da conta para pagar:
     cursor.execute("SELECT valor FROM contas_pagar WHERE id = ?", (id, ))
-    valor = cursor.fetchone()[0]
+    resultado = cursor.fetchone()
 
-    cursor.execute("""
-        UPDATE contas_bancarias
-        SET saldo = saldo - ?
-        WHERE id = ?
-    """, (valor, conta_bancaria_id))
+    if not resultado:
+        conn.close()
+        abort(404)
 
-    # 5) Seguir com o pagamento:
-    cursor.execute("""UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
-    conn.commit()
+    valor = resultado[0]
+
+    try:
+        # 5) Registrar o pagamento da conta:
+        cursor.execute("""
+            UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, id)
+        )
+
+        # 6) Atualizar tabela movimentacoes_bancarias:
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+                (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+                VALUES (?, 'saida', ?, ?, 'contas_pagar', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_pagamento,
+            id,
+            f"Pagamento ID {id}"
+        ))
+
+        # 7) Atualizar saldo da conta bancária:
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo - ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+    
     conn.close()
 
     return redirect(url_for("contas_pagar"))
@@ -1074,7 +1140,7 @@ def registrar_receita(id):
         conn.close()
         abort(400, "Recebimento já está pago.")
 
-    # 4) Atualizar saldo da conta bancária:
+    # 4) Segurança: conferir valor da conta para recebimento:
     cursor.execute("SELECT valor FROM contas_receber WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -1083,17 +1149,38 @@ def registrar_receita(id):
         abort(404)
 
     valor = resultado[0]
-    
-    cursor.execute("""
-        UPDATE contas_bancarias
-        SET saldo = saldo + ?
-        WHERE id = ?
-    """, (valor, conta_bancaria_id))
 
-    # 5) Existe a conta, seguir com o pagamento:
-    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
-    conn.commit()
+    try:
+        # 5) Existe a conta, seguir com o pagamento:
+        cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
+
+        # 6) Atualizar tabela movimentacoes_bancarias:
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+                    (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+                    VALUES (?, 'entrada', ?, ?, 'contas_receber', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_pagamento,
+            id,
+            f"Recebimento ID {id}"
+        ))
+
+        # 7) Atualizar saldo da conta bancária:
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo + ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
     conn.close()
 
     return redirect(url_for("contas_receber"))
@@ -1320,6 +1407,21 @@ def criar_banco():
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
             FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
             FOREIGN KEY (evento_id) REFERENCES eventos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS movimentacoes_bancarias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conta_bancaria_id INTEGER NOT NULL,
+            tipo TEXT CHECK(tipo IN ('entrada', 'saida', 'estorno')) NOT NULL,
+            valor REAL NOT NULL,
+            data TEXT NOT NULL,
+            origem TEXT,
+            origem_id INTEGER,
+            descricao TEXT,
+            transferencia_id INTEGER,
             FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
         )
     ''')
