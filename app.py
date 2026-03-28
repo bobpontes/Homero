@@ -479,6 +479,92 @@ def registrar_pagamento(id):
 
     return redirect(url_for("financeiro"))
 
+@app.route("/mensalidade/estornar/<int:id>", methods=["POST"])
+def estornar_mensalidade(id):
+
+    # 0) Data da movimentação:
+    data_hoje = date.today().strftime("%Y-%m-%d")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 1) Verifica se existe
+    cursor.execute("SELECT status, valor, conta_bancaria_id FROM mensalidades WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    status, valor, conta_bancaria_id = resultado
+
+    # 2) Segurança: Verifica se está pago
+    if status != 'pago':
+        conn.close()
+        abort(400, "Só é possível estornar mensalidades pagas.")
+
+    # 3) Segurança: verifica se tem conta bancária:
+    if not conta_bancaria_id:
+        conn.close()
+        abort(400, "Mensalidade não possui conta bancária vinculada.")
+
+    # 4) Buscar nome do aluno
+    cursor.execute("""
+        SELECT alunos.nome
+        FROM mensalidades
+        JOIN alunos ON mensalidades.aluno_id = alunos.id
+        WHERE mensalidades.id = ?
+    """, (id, ))
+    resultado_nome = cursor.fetchone()
+
+    if not resultado_nome:
+        conn.close()
+        abort(500, "Erro ao obter nome do aluno.")
+
+    nome_aluno = resultado_nome[0]
+
+    try:
+        # 5) Voltar status para pendente
+        cursor.execute("""
+            UPDATE mensalidades
+            SET status = 'pendente',
+                data_pagamento = NULL,
+                metodo_pagamento = NULL,
+                conta_bancaria_id = NULL
+            WHERE id = ?
+        """, (id, ))
+
+        # 6) Registrar a movimentação do Estorno
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+            (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+            VALUES (?, 'estorno', ?, ?, 'mensalidade', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_hoje,
+            id,
+            f"Estorno - {nome_aluno} - Parcela ID {id}"
+        ))
+
+        # 7) Reverter Saldo (entrada vira saída)
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo - ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
+    conn.close()
+
+    return redirect(url_for("financeiro"))
+
 @app.route("/mensalidade/remover/<int:id>", methods=["POST"])
 def remover_mensalidade(id):
     conn = get_db()
@@ -753,6 +839,77 @@ def registrar_conta(id):
         print(e)
         raise
     
+    conn.close()
+
+    return redirect(url_for("contas_pagar"))
+
+@app.route("/contas_pagar/estornar/<int:id>", methods=["POST"])
+def estornar_contas_pagar(id):
+
+    # 0) Data da movimentação:
+    data_hoje = date.today().strftime("%Y-%m-%d")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 1) Verifica se existe
+    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_pagar WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    descricao, status, valor, conta_bancaria_id = resultado
+
+    # 2) Segurança: Verifica se está pago
+    if status != 'pago':
+        conn.close()
+        abort(400, "Só é possível estornar contas pagas.")
+
+    # 3) Segurança: verifica se tem conta bancária:
+    if not conta_bancaria_id:
+        conn.close()
+        abort(400, "Conta não possui conta bancária vinculada.")
+
+    try:
+        # 4) Voltar status para pendente
+        cursor.execute("""
+            UPDATE contas_pagar
+            SET status = 'pendente',
+                data_pagamento = NULL,
+                metodo_pagamento = NULL,
+                conta_bancaria_id = NULL
+            WHERE id = ?
+        """, (id, ))
+
+        # 5) Registrar a movimentação do Estorno
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+            (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+            VALUES (?, 'estorno', ?, ?, 'contas_pagar', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_hoje,
+            id,
+            f"Estorno - {descricao} (ID {id})"
+        ))
+
+        # 6) Reverter Saldo (entrada vira saída)
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo + ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
     conn.close()
 
     return redirect(url_for("contas_pagar"))
@@ -1176,6 +1333,77 @@ def registrar_receita(id):
         """, (valor, conta_bancaria_id))
 
         conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
+    conn.close()
+
+    return redirect(url_for("contas_receber"))
+
+@app.route("/contas_receber/estornar/<int:id>", methods=["POST"])
+def estornar_contas_receber(id):
+
+    # 0) Data da movimentação:
+    data_hoje = date.today().strftime("%Y-%m-%d")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 1) Verifica se existe
+    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_receber WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    descricao, status, valor, conta_bancaria_id = resultado
+
+    # 2) Segurança: Verifica se está pago
+    if status != 'pago':
+        conn.close()
+        abort(400, "Só é possível estornar contas pagas.")
+
+    # 3) Segurança: verifica se tem conta bancária:
+    if not conta_bancaria_id:
+        conn.close()
+        abort(400, "Conta não possui conta bancária vinculada.")
+
+    try:
+        # 4) Voltar status para pendente
+        cursor.execute("""
+            UPDATE contas_receber
+            SET status = 'pendente',
+                data_pagamento = NULL,
+                metodo_pagamento = NULL,
+                conta_bancaria_id = NULL
+            WHERE id = ?
+        """, (id, ))
+
+        # 5) Registrar a movimentação do Estorno
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+            (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+            VALUES (?, 'estorno', ?, ?, 'contas_receber', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_hoje,
+            id,
+            f"Estorno - {descricao} (ID {id})"
+        ))
+
+        # 6) Reverter Saldo (entrada vira saída)
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo - ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
     except Exception as e:
         conn.rollback()
         print(e)
