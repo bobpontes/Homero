@@ -652,6 +652,7 @@ canvas {
 .saldo {
     font-weight: 600;
     color: #2ecc71;
+    white-space: nowrap;
 }
 
 .saldo-total {
@@ -661,4 +662,19 @@ canvas {
 
 .negativo {
     color: #e74c3c;
+}
+
+.positivo {
+    color: #3ce759;
+}
+
+.neutro {
+    color: #e2cc3c;
+}
+
+.descricao {
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }

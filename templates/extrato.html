@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <title>Homero — Contas Bancárias</title>
+</head>
+<body>
+    <div class="layout">
+
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber">💵 Contas a Receber</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+        
+        <main class="content">
+            <div class="header">
+            <h1>🧾 Extrato - Movimentações Bancárias</h1>
+            </div>
+            
+            <div class="container">
+                <div class="card">
+                    <section class="list-section">
+                        <h2>Saldo Total Atual</h2>
+                        {% if (saldo_total_contas < 0) %}
+                            <p class="saldo-total negativo">R$ {{ "%.2f"|format(saldo_total_contas) }}</p>
+                        {% else %}
+                            <p class="saldo-total">R$ {{ "%.2f"|format(saldo_total_contas) }}</p>
+                        {% endif %}
+                        <div>
+                            {% if movimentacoes_bancarias %}
+                                <table>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Tipo</th>
+                                        <th>Descrição</th>
+                                        <th>Valor</th>
+                                        <th>Conta</th>
+                                    </tr>
+
+                                    {% for m in movimentacoes_bancarias %}
+                                    <tr>
+                                        <td>{{ m[0][8:10] }}/{{ m[0][5:7] }}/{{ m[0][0:4] }}</td>
+                                        {% if m[1] == 'entrada' %}
+                                            <td><span class="badge positivo">Entrada</span></td>
+                                        {% elif m[1] == 'saida' %}
+                                            <td><span class="badge negativo">Saída</span></td>
+                                        {% else %}
+                                            <td><span class="badge neutro">Estorno</span></td>
+                                        {% endif %}
+                                        <td class="descricao">{{ m[2] }}</td>
+                                        {% if m[1] == 'entrada' %}
+                                            <td class="saldo positivo">+ R$ {{ "%.2f"|format(m[3]) }}</td>
+                                        {% elif m[1] == 'saida' %}
+                                            <td class="saldo negativo">- R$ {{ "%.2f"|format(m[3]) }}</td>
+                                        {% else %}
+                                            <td class="saldo neutro"> R$ {{ "%.2f"|format(m[3]) }}</td>
+                                        {% endif %}
+                                        <td>{{ m[6] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            {% else %}
+                                <p>Nenhuma movimentação registrada ainda.</p>
+                            {% endif %}
+                        </div>
+                    </section>
+                </div>    
+                
+                <div class="card">
+                    <h3>Ações</h3>
+                    <p>Novas ações serão disponibilizadas em breve.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

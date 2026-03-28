@@ -796,14 +796,14 @@ def registrar_conta(id):
         abort(400, "Conta já está paga.")
 
     # 4) Segurança: conferir valor da conta para pagar:
-    cursor.execute("SELECT valor FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT descricao, valor FROM contas_pagar WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    valor = resultado[0]
+    descricao, valor = resultado
 
     try:
         # 5) Registrar o pagamento da conta:
@@ -822,7 +822,7 @@ def registrar_conta(id):
             valor,
             data_pagamento,
             id,
-            f"Pagamento ID {id}"
+            f"Pagamento - {descricao} (ID {id})"
         ))
 
         # 7) Atualizar saldo da conta bancária:
@@ -1297,15 +1297,15 @@ def registrar_receita(id):
         conn.close()
         abort(400, "Recebimento já está pago.")
 
-    # 4) Segurança: conferir valor da conta para recebimento:
-    cursor.execute("SELECT valor FROM contas_receber WHERE id = ?", (id, ))
+    # 4) Segurança: conferir descrição e valor da conta para recebimento:
+    cursor.execute("SELECT descricao, valor FROM contas_receber WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    valor = resultado[0]
+    descricao, valor = resultado
 
     try:
         # 5) Existe a conta, seguir com o pagamento:
@@ -1322,7 +1322,7 @@ def registrar_receita(id):
             valor,
             data_pagamento,
             id,
-            f"Recebimento ID {id}"
+            f"Recebimento - {descricao} (ID {id})"
         ))
 
         # 7) Atualizar saldo da conta bancária:
@@ -1521,6 +1521,35 @@ def nova_conta_bancaria():
     conn.close()
 
     return redirect(url_for("contas_bancarias"))
+
+@app.route("/extrato")
+def movimentacoes_bancarias():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            m.data,
+            m.tipo,
+            m.descricao,
+            m.valor,
+            m.origem,
+            m.origem_id,
+            c.nome as conta
+        FROM movimentacoes_bancarias m
+        JOIN contas_bancarias c ON m.conta_bancaria_id = c.id
+        ORDER BY m.data DESC, m.id DESC
+    """)
+    movimentacoes_bancarias = cursor.fetchall()
+
+    cursor.execute("SELECT SUM(saldo) FROM contas_bancarias")
+    resultado = cursor.fetchone()
+    saldo_total_contas = resultado[0] if resultado and resultado[0] else 0
+
+    conn.close()
+
+    return render_template("extrato.html", movimentacoes_bancarias=movimentacoes_bancarias, saldo_total_contas=saldo_total_contas)
     
 
 def criar_banco():
