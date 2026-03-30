@@ -388,6 +388,7 @@ def registrar_pagamento(id):
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
+    valor_pago = request.form.get("valor_pago")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os campos são obrigatórios.")
@@ -427,7 +428,20 @@ def registrar_pagamento(id):
         conn.close()
         abort(404)
 
-    valor = resultado[0]
+    valor_original = resultado[0]
+
+    if valor_pago is not None and valor_pago != "":
+        try:
+            valor = float(valor_pago)
+        except ValueError:
+            conn.close()
+            abort(400, "Valor pago inválido.")
+    else:
+        valor = valor_original
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
 
     try:
         # 5) Registrar o pagamento da conta:
@@ -458,7 +472,7 @@ def registrar_pagamento(id):
             valor,
             data_pagamento,
             id,
-            f"Mensalidade - {nome_aluno} - Parcela ID {id}"
+            f"Mensalidade - {nome_aluno} - (ID {id})"
         ))
 
         # 7) Atualizar saldo da conta bancária:
@@ -764,6 +778,7 @@ def registrar_conta(id):
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
+    valor_pago = request.form.get("valor_pago")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os dados são obrigatórios.")
@@ -803,7 +818,20 @@ def registrar_conta(id):
         conn.close()
         abort(404)
 
-    descricao, valor = resultado
+    descricao, valor_original = resultado
+
+    if valor_pago is not None and valor_pago != "":
+        try:
+            valor = float(valor_pago)
+        except ValueError:
+            conn.close()
+            abort(400, "Valor pago inválido.")
+    else:
+        valor = valor_original
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
 
     try:
         # 5) Registrar o pagamento da conta:
@@ -1266,6 +1294,7 @@ def registrar_receita(id):
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
+    valor_pago = request.form.get("valor_pago")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os dados são obrigatórios.")
@@ -1305,7 +1334,20 @@ def registrar_receita(id):
         conn.close()
         abort(404)
 
-    descricao, valor = resultado
+    descricao, valor_original = resultado
+
+    if valor_pago is not None and valor_pago != "":
+        try:
+            valor = float(valor_pago)
+        except ValueError:
+            conn.close()
+            abort(400, "Valor pago inválido.")
+    else:
+        valor = valor_original
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
 
     try:
         # 5) Existe a conta, seguir com o pagamento:
