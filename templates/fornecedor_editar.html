@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Editar Fornecedor</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber">💵 Contas a Receber</a>
+                <a href="/fornecedores" class="active">🏢 Fornecedores</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>✏️ Editar Fornecedor</h1>
+            </div>
+
+            <div class="container">
+                <section class="form-section card">
+                    <h2>Dados do Fornecedor</h2>
+
+                    <form method="POST" action="/fornecedores/editar/{{ fornecedor[0] }}">
+                        <div class="form-grid">
+                            <div class="form-field full">
+                                <label>Nome</label>
+                                <input type="text" name="nome" value="{{ fornecedor[1] }}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Telefone</label>
+                                <input type="text" name="telefone" value="{{ fornecedor[2] or '' }}">
+                            </div>
+
+                            <div class="form-field">
+                                <label>E-mail</label>
+                                <input type="email" name="email" value="{{ fornecedor[3] or '' }}">
+                            </div>
+
+                            <div class="form-field">
+                                <label>CPF</label>
+                                <input type="text" name="cpf" value="{{ fornecedor[4] or '' }}">
+                            </div>
+
+                            <div class="form-field">
+                                <label>CNPJ</label>
+                                <input type="text" name="cnpj" value="{{ fornecedor[5] or '' }}">
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">Salvar Alterações</button>
+                            <a href="/fornecedores" class="btn-secondary">Cancelar</a>
+                        </div>
+                    </form>
+                </section>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
