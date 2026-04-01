@@ -56,8 +56,10 @@
                                         <td>{{ categoria[3] or '—' }}</td>
                                         <td>
                                             <div class="modal-actions">
-                                                <a href="#" class="btn-edit">✏️</a>
-                                                <form method="POST" action="#">
+                                                <form method="GET" action="/plano_contas/categoria/editar/{{ categoria[0] }}">
+                                                    <button type="submit" class="btn-edit">✏️</button>
+                                                </form>
+                                                <form method="POST" action="/plano_contas/categoria/remover/{{ categoria[0] }}">
                                                     <button class="btn-delete" style="display:inline">🗑️</button>
                                                 </form>
                                             </div>
@@ -74,8 +76,10 @@
                                                 <td>—</td>
                                                 <td>
                                                     <div class="modal-actions">
-                                                        <a href="#" class="btn-edit">✏️</a>
-                                                        <form method="POST" action="#">
+                                                        <form method="GET" action="/plano_contas/plano/editar/{{ plano[0] }}">
+                                                            <button type="submit" class="btn-edit">✏️</button>
+                                                        </form>
+                                                        <form method="POST" action="/plano_contas/plano/remover/{{ plano[0] }}">
                                                             <button class="btn-delete" style="display:inline">🗑️</button>
                                                         </form>
                                                     </div>
@@ -93,33 +97,46 @@
             <!-- Modal de Categoria-->
             <div id="modalCategoria" class="modal">
                 <div class="modal-content">
-                    <h3>Nova Categoria</h3>
 
-                    <form method="POST" action="{{ url_for('nova_categoria_plano_conta') }}">
+                    <h3>
+                    {% if categoria_em_edicao %}
+                        Editar Categoria
+                    {% else %}
+                        Nova Categoria
+                    {% endif %}
+                    </h3>
+
+                    <form method="POST" action="{% if categoria_em_edicao %}/plano_contas/categoria/editar/{{ categoria_em_edicao[0] }}{% else %}{{ url_for('nova_categoria_plano_conta') }}{% endif %}">
                         <div class="form-grid">
                             <div class="form-field">
                                 <label>Código</label>
-                                <input type="text" name="codigo" required>
+                                <input type="text" name="codigo" value="{{ categoria_em_edicao[1] if categoria_em_edicao else '' }}" required>
                             </div>
 
                             <div class="form-field">
                                 <label>Nome</label>
-                                <input type="text" name="nome" required>
+                                <input type="text" name="nome" value="{{ categoria_em_edicao[2] if categoria_em_edicao else '' }}" required>
                             </div>
 
                             <div class="form-field">
                                 <label>Tipo</label>
                                 <select name="tipo" required>
-                                    <option value="receita">Receita</option>
-                                    <option value="despesa">Despesa</option>
-                                    <option value="transferencia">Transferência</option>
+                                    <option value="receita" {% if categoria_em_edicao and categoria_em_edicao[3] == 'receita' %}selected{% endif %}>Receita</option>
+                                    <option value="despesa" {% if categoria_em_edicao and categoria_em_edicao[3] == 'despesa' %}selected{% endif %}>Despesa</option>
+                                    <option value="transferencia" {% if categoria_em_edicao and categoria_em_edicao[3] == 'transferencia' %}selected{% endif %}>Transferência</option>
                                 </select>
                             </div>
 
                         </div>
 
                         <div class="modal-actions">
-                            <button type="submit" class="btn-primary">Salvar</button>
+                            <button type="submit" class="btn-primary">
+                                {% if categoria_em_edicao %}
+                                    Atualizar
+                                {% else %}
+                                    Criar
+                                {% endif %}
+                            </button>
                             <button type="button" class="btn-secondary" onclick="fecharModalCategoria()">Cancelar</button>
                         </div>
                     </form>
@@ -129,33 +146,45 @@
             <!-- Modal de Planos de contas-->
             <div id="modalPlanosContas" class="modal">
                 <div class="modal-content">
-                    <h3>Novo Plano de Contas</h3>
+                    <h3>
+                    {% if plano_em_edicao %}
+                        Editar Plano de Contas
+                    {% else %}
+                        Novo Plano de Contas
+                    {% endif %}
+                    </h3>
 
-                    <form method="POST" action="{{ url_for('novo_plano_conta') }}">
+                    <form method="POST" action="{% if plano_em_edicao %}/plano_contas/plano/editar/{{ plano_em_edicao[0] }}{% else %}{{ url_for('novo_plano_conta') }}{% endif %}">
                         <div class="form-grid">
                             <div class="form-field">
                                 <label>Categoria</label>
                                 <select name="categoria_id" required>
                                     {% for categoria in categorias %}
-                                        <option value="{{ categoria[0] }}">{{ categoria[2] }}</option>
+                                    <option value="{{ categoria[0] }}" {% if plano_em_edicao and plano_em_edicao[3]==categoria[0] %}selected{% endif %}>{{ categoria[2] }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
 
                             <div class="form-field">
                                 <label>Código</label>
-                                <input type="text" name="codigo" required>
+                                <input type="text" name="codigo" value="{{ plano_em_edicao[1] if plano_em_edicao else '' }}" required>
                             </div>
 
                             <div class="form-field">
                                 <label>Nome</label>
-                                <input type="text" name="nome" required>
+                                <input type="text" name="nome" value="{{ plano_em_edicao[2] if plano_em_edicao else '' }}" required>
                             </div>
 
                         </div>
 
                         <div class="modal-actions">
-                            <button type="submit" class="btn-primary">Salvar</button>
+                            <button type="submit" class="btn-primary">
+                                {% if plano_em_edicao %}
+                                    Atualizar
+                                {% else %}
+                                    Criar
+                                {% endif %}
+                            </button>
                             <button type="button" class="btn-secondary" onclick="fecharModalPlanoContas()">Cancelar</button>
                         </div>
                     </form>
@@ -191,6 +220,22 @@
                     }
 
                 }
+
+                window.onload = function() {
+                    const params = new URLSearchParams(window.location.search);
+
+                    if (params.get("categoria_editar")) {
+                        abrirModalCategoria();
+                    }
+
+                    if (params.get("plano_editar")) {
+                        abrirModalPlanoContas();
+                    }
+
+                    if (params.get("categoria_editar") || params.get("plano_editar")) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                };
             </script>
         </main>
     </div>
