@@ -678,3 +678,17 @@ canvas {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.categoria-row {
+    background: #f0f0f0;
+    font-weight: bold;
+    border-top: 2px solid #ddd;
+}
+
+.plano-row {
+    color: #555;
+}
+
+.plano-row td:first-child {
+    padding-left: 30px;
+}

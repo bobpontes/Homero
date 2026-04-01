@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Plano de Contas</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber">💵 Contas a Receber</a>
+                <a href="/fornecedores">🏢 Fornecedores</a>
+                <a href="/plano_contas" class="active">📓 Plano de Contas</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>📓 Plano de Contas</h1>
+            </div>
+
+            <div class="container">
+                <section class="card">
+                    <h2>Ações</h2>
+                    <button type="button" class="btn-primary" onclick="abrirModalCategoria()">✚ Nova Categoria</button>
+                    <button type="button" class="btn-secondary" onclick="abrirModalPlanoContas()">✚ Novo Plano de Contas</button>
+                </section>
+
+                <section class="list-section">
+                    <div class="card">
+                        <h2>Estrutura de Plano de Contas</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Nome</th>
+                                    <th>Tipo</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                
+                                {% for categoria in categorias %}
+                
+                                    <tr class="categoria-row">
+                                        <td>{{ categoria[1] }}</td>
+                                        <td>{{ categoria[2] or '—' }}</td>
+                                        <td>{{ categoria[3] or '—' }}</td>
+                                        <td>
+                                            <div class="modal-actions">
+                                                <a href="#" class="btn-edit">✏️</a>
+                                                <form method="POST" action="#">
+                                                    <button class="btn-delete" style="display:inline">🗑️</button>
+                                                </form>
+                                            </div>
+                                            
+                                        </td>
+                                    </tr>
+                                  
+                                    {% for plano in planos %}
+
+                                        {% if plano[3] == categoria[0] %}
+                                            <tr class="plano-row">
+                                                <td>{{ plano[1] }}</td>
+                                                <td>{{ plano[2] }}</td>
+                                                <td>—</td>
+                                                <td>
+                                                    <div class="modal-actions">
+                                                        <a href="#" class="btn-edit">✏️</a>
+                                                        <form method="POST" action="#">
+                                                            <button class="btn-delete" style="display:inline">🗑️</button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Modal de Categoria-->
+            <div id="modalCategoria" class="modal">
+                <div class="modal-content">
+                    <h3>Nova Categoria</h3>
+
+                    <form method="POST" action="{{ url_for('nova_categoria_plano_conta') }}">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Código</label>
+                                <input type="text" name="codigo" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Nome</label>
+                                <input type="text" name="nome" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Tipo</label>
+                                <select name="tipo" required>
+                                    <option value="receita">Receita</option>
+                                    <option value="despesa">Despesa</option>
+                                    <option value="transferencia">Transferência</option>
+                                </select>
+                            </div>
+
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">Salvar</button>
+                            <button type="button" class="btn-secondary" onclick="fecharModalCategoria()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Modal de Planos de contas-->
+            <div id="modalPlanosContas" class="modal">
+                <div class="modal-content">
+                    <h3>Novo Plano de Contas</h3>
+
+                    <form method="POST" action="{{ url_for('novo_plano_conta') }}">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Categoria</label>
+                                <select name="categoria_id" required>
+                                    {% for categoria in categorias %}
+                                        <option value="{{ categoria[0] }}">{{ categoria[2] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Código</label>
+                                <input type="text" name="codigo" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Nome</label>
+                                <input type="text" name="nome" required>
+                            </div>
+
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">Salvar</button>
+                            <button type="button" class="btn-secondary" onclick="fecharModalPlanoContas()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <script>
+                function abrirModalCategoria() {
+                    document.getElementById("modalCategoria").style.display = "flex";
+                }
+
+                function fecharModalCategoria() {
+                    document.getElementById("modalCategoria").style.display = "none";
+                }
+
+                function abrirModalPlanoContas() {
+                    document.getElementById("modalPlanosContas").style.display = "flex";
+                }
+
+                function fecharModalPlanoContas() {
+                    document.getElementById("modalPlanosContas").style.display = "none";
+                }
+
+                window.onclick = function(event) {
+                    const modalCategoria = document.getElementById("modalCategoria");
+                    const modalPlano = document.getElementById("modalPlanosContas");
+                    if (event.target === modalCategoria) {
+                        modalCategoria.style.display = "none";
+                    }
+
+                    if (event.target === modalPlano) {
+                        modalPlano.style.display = "none";
+                    }
+
+                }
+            </script>
+        </main>
+    </div>
+</body>
+</html>

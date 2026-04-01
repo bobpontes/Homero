@@ -1792,6 +1792,124 @@ def remover_fornecedor(id):
     conn.close()
     return redirect(url_for("fornecedores"))
 
+@app.route("/plano_contas")
+def plano_contas():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, codigo, nome, tipo
+        FROM categorias_plano_contas
+        ORDER BY codigo
+    """)
+    categorias = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT id, codigo, nome, categoria_id
+        FROM plano_contas
+        ORDER BY codigo
+    """)
+    planos = cursor.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "plano_contas.html",
+        categorias=categorias,
+        planos=planos
+    )
+
+@app.route("/plano_contas/categoria/nova", methods=["POST"])
+def nova_categoria_plano_conta():
+
+    codigo = (request.form.get("codigo") or "").strip()
+    nome = (request.form.get("nome") or "").strip()
+    tipo = (request.form.get("tipo") or "").strip()
+
+    if not codigo or not nome or not tipo:
+        abort(400, "Todos os campos são obrigatórios.")
+
+    TIPOS_VALIDOS = ("receita", "despesa", "transferencia")
+
+    if tipo not in TIPOS_VALIDOS:
+        abort(400, "Tipo inválido.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = ?", (codigo,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Já existe uma categoria com este código.")
+
+    try:
+        cursor.execute("""
+            INSERT INTO categorias_plano_contas (codigo, nome, tipo)
+            VALUES (?, ?, ?)
+        """, (codigo, nome, tipo))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao criar categoria.")
+
+    conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+# Novo endpoint para criar plano de contas
+@app.route("/plano_contas/novo", methods=["POST"])
+def novo_plano_conta():
+
+    codigo = (request.form.get("codigo") or "").strip()
+    nome = (request.form.get("nome") or "").strip()
+    categoria_id = request.form.get("categoria_id")
+
+    if not codigo or not nome or not categoria_id:
+        abort(400, "Todos os campos são obrigatórios.")
+
+    try:
+        categoria_id = int(categoria_id)
+    except (TypeError, ValueError):
+        abort(400, "Categoria inválida.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verifica se a categoria existe
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (categoria_id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Categoria não encontrada.")
+
+    # Código único
+    cursor.execute("SELECT id FROM plano_contas WHERE codigo = ?", (codigo,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Já existe um plano de contas com este código.")
+
+    try:
+        cursor.execute("""
+            INSERT INTO plano_contas (codigo, nome, categoria_id)
+            VALUES (?, ?, ?)
+        """, (codigo, nome, categoria_id))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao criar plano de contas.")
+
+    conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+
+
 def criar_banco():
     conn = get_db()
     cursor = conn.cursor()
