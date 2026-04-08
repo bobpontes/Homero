@@ -11,11 +11,49 @@ app = Flask(__name__)
 # Data de hoje
 today = date.today().strftime("%Y-%m-%d")
 
+# Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
+def adicionar_meses(data_base, meses):
+    dia_original = data_base.day
+
+    mes = data_base.month -1 + meses
+    ano = data_base.year + mes // 12
+    mes = mes % 12 + 1
+    
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+
+    # mantém o mesmo dia sempre que possível
+    dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
+    return date(ano, mes, dia)
+
+
 # função para chamar o banco de dados:
 def get_db():
     conn = sqlite3.connect("escola.db")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+# helper para aplicação de filtro no sql:
+def aplicar_condicao(filtro_sql, condicao):
+    if filtro_sql:
+        return filtro_sql + " AND " + condicao
+    else:
+        return "WHERE " + condicao
+
+# Formatar mês por extenso em pt-BR:
+meses = {
+    "01": "Janeiro",
+    "02": "Fevereiro",
+    "03": "Março",
+    "04": "Abril",
+    "05": "Maio",
+    "06": "Junho",
+    "07": "Julho",
+    "08": "Agosto",
+    "09": "Setembro",
+    "10": "Outubro",
+    "11": "Novembro",
+    "12": "Dezembro"
+}
 
 @app.errorhandler(404)
 def pagina_nao_encontrada(e):
@@ -285,20 +323,6 @@ def financeiro():
         mes=mes
     )
 
-def adicionar_meses(data_base, meses):
-    dia_original = data_base.day
-
-    mes = data_base.month -1 + meses
-    ano = data_base.year + mes // 12
-    mes = mes % 12 + 1
-    
-    ultimo_dia = calendar.monthrange(ano, mes)[1]
-
-    # mantém o mesmo dia sempre que possível
-    dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
-    return date(ano, mes, dia)
-
-
 @app.route("/mensalidade/nova", methods=["POST"])
 def nova_mensalidade():
 
@@ -364,6 +388,7 @@ def registrar_pagamento(id):
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
+    valor_pago = request.form.get("valor_pago")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os campos são obrigatórios.")
@@ -395,7 +420,7 @@ def registrar_pagamento(id):
         conn.close()
         abort(400, "Não é possível registrar o pagamento, a mensalidade já havia sido paga.")
     
-    # Antes de atualizar mensalidade, atualizar o saldo bancário:
+    # 4) Segurança: conferir o valor da mensalidade:
     cursor.execute("SELECT valor FROM mensalidades WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
@@ -403,18 +428,153 @@ def registrar_pagamento(id):
         conn.close()
         abort(404)
 
-    valor = resultado[0]
+    valor_original = resultado[0]
 
+    if valor_pago is not None and valor_pago != "":
+        try:
+            valor = float(valor_pago)
+        except ValueError:
+            conn.close()
+            abort(400, "Valor pago inválido.")
+    else:
+        valor = valor_original
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        # 5) Registrar o pagamento da conta:
+        cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""", 
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
+
+        # 6) Atualizar tabela movimentacoes_bancarias:
+        cursor.execute("""
+            SELECT alunos.nome
+            FROM mensalidades
+            JOIN alunos ON mensalidades.aluno_id = alunos.id
+            WHERE mensalidades.id = ?
+        """, (id, ))
+        resultado_nome = cursor.fetchone()
+
+        if not resultado_nome:
+            conn.rollback()
+            abort(500, "Erro ao obter nome do aluno.")
+
+        nome_aluno = resultado_nome[0]
+
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+                       (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+                       VALUES (?, 'entrada', ?, ?, 'mensalidade', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_pagamento,
+            id,
+            f"Mensalidade - {nome_aluno} - (ID {id})"
+        ))
+
+        # 7) Atualizar saldo da conta bancária:
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo + ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+        
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+    
+    conn.close()
+
+    return redirect(url_for("financeiro"))
+
+@app.route("/mensalidade/estornar/<int:id>", methods=["POST"])
+def estornar_mensalidade(id):
+
+    # 0) Data da movimentação:
+    data_hoje = date.today().strftime("%Y-%m-%d")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 1) Verifica se existe
+    cursor.execute("SELECT status, valor, conta_bancaria_id FROM mensalidades WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    status, valor, conta_bancaria_id = resultado
+
+    # 2) Segurança: Verifica se está pago
+    if status != 'pago':
+        conn.close()
+        abort(400, "Só é possível estornar mensalidades pagas.")
+
+    # 3) Segurança: verifica se tem conta bancária:
+    if not conta_bancaria_id:
+        conn.close()
+        abort(400, "Mensalidade não possui conta bancária vinculada.")
+
+    # 4) Buscar nome do aluno
     cursor.execute("""
-        UPDATE contas_bancarias
-        SET saldo = saldo + ?
-        WHERE id = ?
-    """, (valor, conta_bancaria_id))
+        SELECT alunos.nome
+        FROM mensalidades
+        JOIN alunos ON mensalidades.aluno_id = alunos.id
+        WHERE mensalidades.id = ?
+    """, (id, ))
+    resultado_nome = cursor.fetchone()
 
-    # Se existir e não tiver sido paga, registrar pagamento:
-    cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""", 
-                   (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
-    conn.commit()
+    if not resultado_nome:
+        conn.close()
+        abort(500, "Erro ao obter nome do aluno.")
+
+    nome_aluno = resultado_nome[0]
+
+    try:
+        # 5) Voltar status para pendente
+        cursor.execute("""
+            UPDATE mensalidades
+            SET status = 'pendente',
+                data_pagamento = NULL,
+                metodo_pagamento = NULL,
+                conta_bancaria_id = NULL
+            WHERE id = ?
+        """, (id, ))
+
+        # 6) Registrar a movimentação do Estorno
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+            (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+            VALUES (?, 'estorno', ?, ?, 'mensalidade', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_hoje,
+            id,
+            f"Estorno - {nome_aluno} - Parcela ID {id}"
+        ))
+
+        # 7) Reverter Saldo (entrada vira saída)
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo - ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
     conn.close()
 
     return redirect(url_for("financeiro"))
@@ -618,6 +778,7 @@ def registrar_conta(id):
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
+    valor_pago = request.form.get("valor_pago")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os dados são obrigatórios.")
@@ -649,20 +810,134 @@ def registrar_conta(id):
         conn.close()
         abort(400, "Conta já está paga.")
 
-    # 4) Registrar atualização no Saldo da conta bancária:
-    cursor.execute("SELECT valor FROM contas_pagar WHERE id = ?", (id, ))
-    valor = cursor.fetchone()[0]
+    # 4) Segurança: conferir valor da conta para pagar:
+    cursor.execute("SELECT descricao, valor FROM contas_pagar WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
 
-    cursor.execute("""
-        UPDATE contas_bancarias
-        SET saldo = saldo - ?
-        WHERE id = ?
-    """, (valor, conta_bancaria_id))
+    if not resultado:
+        conn.close()
+        abort(404)
 
-    # 5) Seguir com o pagamento:
-    cursor.execute("""UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
-    conn.commit()
+    descricao, valor_original = resultado
+
+    if valor_pago is not None and valor_pago != "":
+        try:
+            valor = float(valor_pago)
+        except ValueError:
+            conn.close()
+            abort(400, "Valor pago inválido.")
+    else:
+        valor = valor_original
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        # 5) Registrar o pagamento da conta:
+        cursor.execute("""
+            UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, id)
+        )
+
+        # 6) Atualizar tabela movimentacoes_bancarias:
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+                (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+                VALUES (?, 'saida', ?, ?, 'contas_pagar', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_pagamento,
+            id,
+            f"Pagamento - {descricao} (ID {id})"
+        ))
+
+        # 7) Atualizar saldo da conta bancária:
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo - ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+    
+    conn.close()
+
+    return redirect(url_for("contas_pagar"))
+
+@app.route("/contas_pagar/estornar/<int:id>", methods=["POST"])
+def estornar_contas_pagar(id):
+
+    # 0) Data da movimentação:
+    data_hoje = date.today().strftime("%Y-%m-%d")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 1) Verifica se existe
+    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_pagar WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    descricao, status, valor, conta_bancaria_id = resultado
+
+    # 2) Segurança: Verifica se está pago
+    if status != 'pago':
+        conn.close()
+        abort(400, "Só é possível estornar contas pagas.")
+
+    # 3) Segurança: verifica se tem conta bancária:
+    if not conta_bancaria_id:
+        conn.close()
+        abort(400, "Conta não possui conta bancária vinculada.")
+
+    try:
+        # 4) Voltar status para pendente
+        cursor.execute("""
+            UPDATE contas_pagar
+            SET status = 'pendente',
+                data_pagamento = NULL,
+                metodo_pagamento = NULL,
+                conta_bancaria_id = NULL
+            WHERE id = ?
+        """, (id, ))
+
+        # 5) Registrar a movimentação do Estorno
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+            (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+            VALUES (?, 'estorno', ?, ?, 'contas_pagar', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_hoje,
+            id,
+            f"Estorno - {descricao} (ID {id})"
+        ))
+
+        # 6) Reverter Saldo (entrada vira saída)
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo + ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
     conn.close()
 
     return redirect(url_for("contas_pagar"))
@@ -726,10 +1001,44 @@ def remover_grupo_conta(grupo_id):
 @app.route("/contas_receber")
 def contas_receber():
 
+    # Filtro para dados
+    mes = request.args.get("mes") or None
+    ano = request.args.get("ano") or None
+    data_inicio = request.args.get("data_inicio") or None
+    data_fim = request.args.get("data_fim") or None
+
+    filtro_sql = ""
+    parametros = ()
+
+    if data_inicio and data_fim:
+        filtro_sql = "WHERE date(contas_receber.data_vencimento) BETWEEN date(?) AND date(?)"
+        parametros = (data_inicio, data_fim)
+        
+        mes1 = meses[data_inicio[5:7]]
+        mes2 = meses[data_fim[5:7]]
+
+        periodo_formatado = (
+            f"{data_inicio[8:10]} {mes1[:3]} {data_inicio[0:4]} "
+            f"até {data_fim[8:10]} {mes2[:3]} {data_fim[0:4]}"
+        )
+
+    elif ano:
+        filtro_sql = "WHERE strftime('%Y', contas_receber.data_vencimento) = ?"
+        parametros = (ano, )
+        periodo_formatado = f"Ano de {ano}"
+
+    else:
+        if not mes:
+            mes = date.today().strftime("%Y-%m")
+            
+        filtro_sql = "WHERE strftime('%Y-%m', contas_receber.data_vencimento) = ?"
+        parametros = (mes, )
+        periodo_formatado = f"{meses[mes[5:7]]}/{mes[0:4]}"
+
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    query = f"""
         SELECT contas_receber.id,
             contas_receber.descricao,
             contas_receber.valor,
@@ -748,6 +1057,7 @@ def contas_receber():
             ON contas_receber.plano_conta_id = plano_contas.id
         LEFT JOIN fornecedores
             ON contas_receber.fornecedor_id = fornecedores.id
+        {filtro_sql}
         ORDER BY
             CASE
                 WHEN contas_receber.status = 'pendente'
@@ -757,7 +1067,8 @@ def contas_receber():
             END,
             contas_receber.data_vencimento ASC
                 
-""")
+    """
+    cursor.execute(query, parametros)
     
     receitas = cursor.fetchall()
 
@@ -777,20 +1088,126 @@ def contas_receber():
 
     receitas = receitas_com_atraso
 
+    # Preparação dos filtros para queries agregadas:
+    filtro_receber = filtro_sql
+    filtro_mensalidades = filtro_sql.replace("contas_receber", "mensalidades")
+    filtro_pagar = filtro_sql.replace("contas_receber", "contas_pagar")
+
+    filtro_receber_status = aplicar_condicao(filtro_receber, "status = 'pendente'")
+    filtro_receber_vencidas = aplicar_condicao(filtro_receber, "status = 'pendente' AND date(data_vencimento) < date('now')")
+    filtro_receber_pago = aplicar_condicao(filtro_receber, "status = 'pago'")
+
+    # Gráfico do Dashboard
+    # Receitas e Mensalidades
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM contas_receber
+    {filtro_receber}
+    """, parametros)
+    resultado_c_receber = cursor.fetchone()
+    total_contas_receber = resultado_c_receber[0] if resultado_c_receber and resultado_c_receber[0] else 0.0
+    total_receitas = total_contas_receber
+
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM mensalidades
+    {filtro_mensalidades}
+    """, parametros)
+    resultado_mensalidades = cursor.fetchone()
+    total_contas_mensalidades = resultado_mensalidades[0] if resultado_mensalidades and resultado_mensalidades[0] else 0.0
+    total_mensalidades = total_contas_mensalidades
+
+    receita_total = total_receitas + total_mensalidades
+
+    # Despesas
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM contas_pagar
+    {filtro_pagar}
+    """, parametros)
+    resultado_c_pagar = cursor.fetchone()
+    total_despesas = resultado_c_pagar[0] if resultado_c_pagar and resultado_c_pagar[0] else 0.0
+
+    despesa_total = total_despesas
+
+    # Soldo Projetado
+    saldo_total = receita_total - despesa_total
+
+    # Índices do Dashboard (de acordo com o filtro solicitado)
+    # Contas a receber pendentes que estão vencidas
+    cursor.execute(f"""
+    SELECT COUNT(*)
+    FROM contas_receber
+    {filtro_receber_vencidas}
+    """, parametros)
+    resultado_qtdd_vencidas = cursor.fetchone()
+    total_vencidas = resultado_qtdd_vencidas[0] if resultado_qtdd_vencidas and resultado_qtdd_vencidas[0] else 0
+    parcelas_vencidas = total_vencidas
+
+    # Contas a receber pendentes (ainda não vencidas)
+    cursor.execute(f"""
+    SELECT COUNT(*)
+    FROM contas_receber
+    {filtro_receber_status}
+    """, parametros)
+    resultado_qtdd_pendentes = cursor.fetchone()
+    total_pendentes = resultado_qtdd_pendentes[0] if resultado_qtdd_pendentes and resultado_qtdd_pendentes[0] else 0
+    parcelas_pendentes = total_pendentes - total_vencidas
+
+    # Contas a receber pagas
+    cursor.execute(f"""
+    SELECT COUNT(*)
+    FROM contas_receber
+    {filtro_receber_pago}
+    """, parametros)
+    resultado_qtdd_pagas = cursor.fetchone()
+    total_pagas = resultado_qtdd_pagas[0] if resultado_qtdd_pagas and resultado_qtdd_pagas[0] else 0
+    parcelas_pagas = total_pagas
+
+    # Retorna o valor total vencido e pendente (Valor total em aberto)
+    cursor.execute(f"""
+    SELECT SUM(valor)
+    FROM contas_receber
+    {filtro_receber_status}
+    """, parametros)
+    resultado_receitas_pendente = cursor.fetchone()
+    total_receitas_pendentes = resultado_receitas_pendente[0] if resultado_receitas_pendente and resultado_receitas_pendente[0] else 0.0 # Se for None, retorna 0.0
+    total_aberto = total_receitas_pendentes
+        
+
     cursor.execute("SELECT id, nome FROM categorias_plano_contas ORDER BY nome")
     categorias = cursor.fetchall()
 
     cursor.execute("SELECT id, nome FROM plano_contas ORDER BY nome")
     planos = cursor.fetchall()
 
+    cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
+    fornecedores = cursor.fetchall()
+
     cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
     contas_banco = cursor.fetchall()
 
     conn.close()
 
-    return render_template("contas_receber.html", receitas=receitas, categorias=categorias, planos=planos, today=today, contas_banco=contas_banco)
+    return render_template("contas_receber.html",
+        mes=mes,
+        periodo_formatado=periodo_formatado,
+        receitas=receitas,
+        receita_total=receita_total,
+        despesa_total=despesa_total,
+        saldo_total=saldo_total,
+        parcelas_vencidas=parcelas_vencidas,
+        parcelas_pendentes=parcelas_pendentes,
+        parcelas_pagas=parcelas_pagas,
+        total_aberto=total_aberto,
+        categorias=categorias,
+        planos=planos,
+        today=today,
+        fornecedores=fornecedores,
+        contas_banco=contas_banco
+    )
 
-@app.route("/receita/nova", methods=["POST"])
+@app.route("/contas_receber/nova", methods=["POST"])
 def nova_receita():
     
     descricao = request.form.get("descricao")
@@ -877,6 +1294,7 @@ def registrar_receita(id):
     data_pagamento = request.form.get("data_pagamento")
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
+    valor_pago = request.form.get("valor_pago")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os dados são obrigatórios.")
@@ -908,26 +1326,131 @@ def registrar_receita(id):
         conn.close()
         abort(400, "Recebimento já está pago.")
 
-    # 4) Atualizar saldo da conta bancária:
-    cursor.execute("SELECT valor FROM contas_receber WHERE id = ?", (id, ))
+    # 4) Segurança: conferir descrição e valor da conta para recebimento:
+    cursor.execute("SELECT descricao, valor FROM contas_receber WHERE id = ?", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    valor = resultado[0]
-    
-    cursor.execute("""
-        UPDATE contas_bancarias
-        SET saldo = saldo + ?
-        WHERE id = ?
-    """, (valor, conta_bancaria_id))
+    descricao, valor_original = resultado
 
-    # 5) Existe a conta, seguir com o pagamento:
-    cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
-        (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
-    conn.commit()
+    if valor_pago is not None and valor_pago != "":
+        try:
+            valor = float(valor_pago)
+        except ValueError:
+            conn.close()
+            abort(400, "Valor pago inválido.")
+    else:
+        valor = valor_original
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        # 5) Existe a conta, seguir com o pagamento:
+        cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
+
+        # 6) Atualizar tabela movimentacoes_bancarias:
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+                    (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+                    VALUES (?, 'entrada', ?, ?, 'contas_receber', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_pagamento,
+            id,
+            f"Recebimento - {descricao} (ID {id})"
+        ))
+
+        # 7) Atualizar saldo da conta bancária:
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo + ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
+    conn.close()
+
+    return redirect(url_for("contas_receber"))
+
+@app.route("/contas_receber/estornar/<int:id>", methods=["POST"])
+def estornar_contas_receber(id):
+
+    # 0) Data da movimentação:
+    data_hoje = date.today().strftime("%Y-%m-%d")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 1) Verifica se existe
+    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_receber WHERE id = ?", (id, ))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        conn.close()
+        abort(404)
+
+    descricao, status, valor, conta_bancaria_id = resultado
+
+    # 2) Segurança: Verifica se está pago
+    if status != 'pago':
+        conn.close()
+        abort(400, "Só é possível estornar contas pagas.")
+
+    # 3) Segurança: verifica se tem conta bancária:
+    if not conta_bancaria_id:
+        conn.close()
+        abort(400, "Conta não possui conta bancária vinculada.")
+
+    try:
+        # 4) Voltar status para pendente
+        cursor.execute("""
+            UPDATE contas_receber
+            SET status = 'pendente',
+                data_pagamento = NULL,
+                metodo_pagamento = NULL,
+                conta_bancaria_id = NULL
+            WHERE id = ?
+        """, (id, ))
+
+        # 5) Registrar a movimentação do Estorno
+        cursor.execute("""
+            INSERT INTO movimentacoes_bancarias
+            (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
+            VALUES (?, 'estorno', ?, ?, 'contas_receber', ?, ?)
+        """, (
+            conta_bancaria_id,
+            valor,
+            data_hoje,
+            id,
+            f"Estorno - {descricao} (ID {id})"
+        ))
+
+        # 6) Reverter Saldo (entrada vira saída)
+        cursor.execute("""
+            UPDATE contas_bancarias
+            SET saldo = saldo - ?
+            WHERE id = ?
+        """, (valor, conta_bancaria_id))
+
+        conn.commit()
+    
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        raise
+
     conn.close()
 
     return redirect(url_for("contas_receber"))
@@ -1040,7 +1563,593 @@ def nova_conta_bancaria():
     conn.close()
 
     return redirect(url_for("contas_bancarias"))
+
+@app.route("/extrato")
+def movimentacoes_bancarias():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            m.data,
+            m.tipo,
+            m.descricao,
+            m.valor,
+            m.origem,
+            m.origem_id,
+            c.nome as conta
+        FROM movimentacoes_bancarias m
+        JOIN contas_bancarias c ON m.conta_bancaria_id = c.id
+        ORDER BY m.data DESC, m.id DESC
+    """)
+    movimentacoes_bancarias = cursor.fetchall()
+
+    cursor.execute("SELECT SUM(saldo) FROM contas_bancarias")
+    resultado = cursor.fetchone()
+    saldo_total_contas = resultado[0] if resultado and resultado[0] else 0
+
+    conn.close()
+
+    return render_template("extrato.html", movimentacoes_bancarias=movimentacoes_bancarias, saldo_total_contas=saldo_total_contas)
     
+@app.route("/fornecedores")
+def fornecedores():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, nome, telefone, email, cpf, cnpj
+        FROM fornecedores
+        ORDER BY nome
+    """)
+
+    lista_fornecedores = cursor.fetchall()
+    total_fornecedores = len(lista_fornecedores)
+
+    conn.close()
+
+    return render_template(
+        "fornecedores.html",
+        lista_fornecedores=lista_fornecedores,
+        total_fornecedores=total_fornecedores,
+    )
+
+@app.route("/fornecedores/novo", methods=["POST"])
+def novo_fornecedor():
+
+    nome = request.form.get("nome")
+    telefone = request.form.get("telefone")
+    email = request.form.get("email")
+    cpf = request.form.get("cpf")
+    cnpj = request.form.get("cnpj")
+
+    if not nome:
+        abort(400, "Nome do fornecedor é obrigatório.")
+
+    if telefone:
+        try:
+            telefone = telefone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        except (ValueError, TypeError):
+            abort(400, "Número de telefone inválido, preencha apenas os números")
+
+    if email and ("@" not in email or "." not in email):
+        abort(400, "Endereço de e-mail inválido.")
+    
+
+    if cpf and cnpj:
+        abort(400, "Informe apenas CPF ou CNPJ.")
+
+
+    if cpf and not cnpj:
+        try:
+            cpf = cpf.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        except (ValueError, TypeError):
+            abort(400, "Número de documento inválido, preencha apenas os números")
+
+    if cnpj and not cpf:
+        try:
+            cnpj = cnpj.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        except (ValueError, TypeError):
+            abort(400, "Número de documento inválido, preencha apenas os números")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT nome FROM fornecedores WHERE nome = ?", (nome, ))
+    nome_existente = cursor.fetchone()
+
+    if nome_existente:
+        conn.close()
+        abort(400, "Este fornecedor já foi registrado em nosso sistema.") 
+
+    try:
+        cursor.execute(
+            "INSERT INTO fornecedores (nome, telefone, email, CPF, CNPJ) VALUES (?, ?, ?, ?, ?)",
+            (nome, telefone, email, cpf, cnpj)
+        )
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao criar fornecedor.")
+
+    conn.close()
+
+    return redirect(url_for("fornecedores"))
+
+@app.route("/fornecedores/editar/<int:id>", methods=["GET", "POST"])
+def editar_fornecedor(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, nome, telefone, email, cpf, cnpj FROM fornecedores WHERE id = ?",
+        (id,)
+    )
+    fornecedor = cursor.fetchone()
+
+    if not fornecedor:
+        conn.close()
+        abort(404, "Fornecedor não encontrado.")
+
+    if request.method == "POST":
+        nome = request.form.get("nome")
+        telefone = request.form.get("telefone")
+        email = request.form.get("email")
+        cpf = request.form.get("cpf")
+        cnpj = request.form.get("cnpj")
+
+        if not nome:
+            conn.close()
+            abort(400, "Nome do fornecedor é obrigatório.")
+        
+        if telefone:
+            try:
+                telefone = telefone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+            except (ValueError, TypeError):
+                abort(400, "Número de telefone inválido, preencha apenas os números")
+
+        if email and ("@" not in email or "." not in email):
+            abort(400, "Endereço de e-mail inválido.")
+
+        if cpf and cnpj:
+            abort(400, "Informe apenas CPF ou CNPJ.")
+
+        if cpf and not cnpj:
+            try:
+                cpf = cpf.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+            except (ValueError, TypeError):
+                abort(400, "Número de documento inválido, preencha apenas os números")
+
+        if cnpj and not cpf:
+            try:
+                cnpj = cnpj.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+            except (ValueError, TypeError):
+                abort(400, "Número de documento inválido, preencha apenas os números")
+
+        try:
+            cursor.execute(
+                """
+                UPDATE fornecedores
+                SET nome = ?, telefone = ?, email = ?, CPF = ?, CNPJ = ?
+                WHERE id = ?
+                """,
+                (nome, telefone, email, cpf, cnpj, id)
+            )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(e)
+            abort(500, "Erro ao atualizar fornecedor.")
+
+        conn.close()
+        return redirect(url_for("fornecedores"))
+    
+    conn.close()
+
+    return render_template("fornecedor_editar.html", fornecedor=fornecedor)
+
+@app.route("/fornecedores/remover/<int:id>", methods=["POST"])
+def remover_fornecedor(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (id,))
+    fornecedor = cursor.fetchone()
+
+    if not fornecedor:
+        conn.close()
+        abort(400, "Esse fornecedor não existe, portanto não pode ser excluído.")
+
+    cursor.execute("SELECT id FROM contas_pagar WHERE fornecedor_id = ?", (id,))
+    conta_pagar = cursor.fetchone()
+
+    if conta_pagar:
+        conn.close()
+        abort(400, "Não é possível excluir fornecedor que está vinculado com contas a pagar.")
+
+    cursor.execute("SELECT id FROM contas_receber WHERE fornecedor_id = ?", (id,))
+    conta_receber = cursor.fetchone()
+
+    if conta_receber:
+        conn.close()
+        abort(400, "Não é possível excluir fornecedor que está vinculado com contas a receber.")
+
+    try:
+        cursor.execute("DELETE FROM fornecedores WHERE id = ?", (id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao remover fornecedor.")
+
+    conn.close()
+    return redirect(url_for("fornecedores"))
+
+@app.route("/plano_contas")
+def plano_contas():
+
+    categoria_editar_id = request.args.get("categoria_editar")
+    plano_editar_id = request.args.get("plano_editar")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, codigo, nome, tipo
+        FROM categorias_plano_contas
+        ORDER BY codigo
+    """)
+    categorias = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT id, codigo, nome, categoria_id
+        FROM plano_contas
+        ORDER BY codigo
+    """)
+    planos = cursor.fetchall()
+
+    categoria_em_edicao = None
+    if categoria_editar_id:
+
+        try:
+            categoria_editar_id = int(categoria_editar_id)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Categoria inválida.")
+        
+        cursor.execute("""
+            SELECT id, codigo, nome, tipo
+            FROM categorias_plano_contas
+            WHERE id = ?
+        """, (categoria_editar_id, ))
+        categoria_em_edicao = cursor.fetchone()
+    
+    plano_em_edicao = None
+    if plano_editar_id:
+        try:
+            plano_editar_id = int(plano_editar_id)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Plano de contas inválido.")
+        
+        cursor.execute("""
+            SELECT id, codigo, nome, categoria_id
+            FROM plano_contas
+            WHERE id = ?
+        """, (plano_editar_id, ))
+
+        plano_em_edicao = cursor.fetchone()
+
+
+    conn.close()
+
+    return render_template(
+        "plano_contas.html",
+        categorias=categorias,
+        planos=planos,
+        categoria_em_edicao=categoria_em_edicao,
+        plano_em_edicao=plano_em_edicao
+    )
+
+@app.route("/plano_contas/categoria/nova", methods=["POST"])
+def nova_categoria_plano_conta():
+
+    codigo = (request.form.get("codigo") or "").strip()
+    nome = (request.form.get("nome") or "").strip()
+    tipo = (request.form.get("tipo") or "").strip()
+
+    if not codigo or not nome or not tipo:
+        abort(400, "Todos os campos são obrigatórios.")
+
+    TIPOS_VALIDOS = ("receita", "despesa", "transferencia")
+
+    if tipo not in TIPOS_VALIDOS:
+        abort(400, "Tipo inválido.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = ?", (codigo,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Já existe uma categoria com este código.")
+
+    try:
+        cursor.execute("""
+            INSERT INTO categorias_plano_contas (codigo, nome, tipo)
+            VALUES (?, ?, ?)
+        """, (codigo, nome, tipo))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao criar categoria.")
+
+    conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+
+# Novo endpoint para criar plano de contas
+@app.route("/plano_contas/novo", methods=["POST"])
+def novo_plano_conta():
+
+    codigo = (request.form.get("codigo") or "").strip()
+    nome = (request.form.get("nome") or "").strip()
+    categoria_id = request.form.get("categoria_id")
+
+    if not codigo or not nome or not categoria_id:
+        abort(400, "Todos os campos são obrigatórios.")
+
+    try:
+        categoria_id = int(categoria_id)
+    except (TypeError, ValueError):
+        abort(400, "Categoria inválida.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Verifica se a categoria existe
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (categoria_id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Categoria não encontrada.")
+
+    # Código único
+    cursor.execute("SELECT id FROM plano_contas WHERE codigo = ?", (codigo,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Já existe um plano de contas com este código.")
+
+    try:
+        cursor.execute("""
+            INSERT INTO plano_contas (codigo, nome, categoria_id)
+            VALUES (?, ?, ?)
+        """, (codigo, nome, categoria_id))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao criar plano de contas.")
+
+    conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+# EDITAR CATEGORIA
+@app.route("/plano_contas/categoria/editar/<int:id>", methods=["GET", "POST"])
+def editar_categoria_plano_conta(id):
+
+    if request.method == "GET":
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, codigo, nome, tipo FROM categorias_plano_contas WHERE id = ?", (id, ))
+        categoria = cursor.fetchone()
+
+        if not categoria:
+            conn.close()
+            abort(404, "Categoria não encontrada.")
+        
+        conn.close()
+        return redirect(url_for("plano_contas", categoria_editar=id))
+
+    if request.method == "POST":
+
+        codigo = (request.form.get("codigo") or "").strip()
+        nome = (request.form.get("nome") or "").strip()
+        tipo = (request.form.get("tipo") or "").strip()
+
+        if not codigo or not nome or not tipo:
+            abort(400, "Todos os campos são obrigatórios.")
+
+        TIPOS_VALIDOS = ("receita", "despesa", "transferencia")
+
+        if tipo not in TIPOS_VALIDOS:
+            abort(400, "Tipo inválido.")
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (id,))
+        if not cursor.fetchone():
+            conn.close()
+            abort(404, "Categoria não encontrada.")
+
+        cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = ? AND id != ?", (codigo, id))
+        if cursor.fetchone():
+            conn.close()
+            abort(400, "Já existe outra categoria com este código.")
+
+        try:
+            cursor.execute("""
+                UPDATE categorias_plano_contas
+                SET codigo = ?, nome = ?, tipo = ?
+                WHERE id = ?
+            """, (codigo, nome, tipo, id))
+
+            conn.commit()
+
+        except Exception as e:
+            conn.rollback()
+            print(e)
+            abort(500, "Erro ao atualizar categoria.")
+
+        conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+# REMOVER CATEGORIA
+@app.route("/plano_contas/categoria/remover/<int:id>", methods=["POST"])
+def remover_categoria_plano_conta(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Categoria não existe.")
+
+    # Segurança: não permitir se houver planos vinculados
+    cursor.execute("SELECT id FROM plano_contas WHERE categoria_id = ? LIMIT 1", (id,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Categoria possui planos vinculados.")
+
+    try:
+        cursor.execute("DELETE FROM categorias_plano_contas WHERE id = ?", (id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao remover categoria.")
+
+    conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+# EDITAR PLANO
+@app.route("/plano_contas/plano/editar/<int:id>", methods=["GET","POST"])
+def editar_plano_conta(id):
+
+    if request.method == "GET":
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, codigo, nome, categoria_id
+            FROM plano_contas
+            WHERE id = ?
+        """, (id, ))
+        plano = cursor.fetchone()
+
+        if not plano:
+            conn.close()
+            abort(404, "Plano não encontrado.")
+        
+        conn.close()
+        return redirect(url_for("plano_contas", plano_editar=id))        
+        
+    if request.method == "POST":
+
+        codigo = (request.form.get("codigo") or "").strip()
+        nome = (request.form.get("nome") or "").strip()
+        categoria_id = request.form.get("categoria_id")
+
+        if not codigo or not nome or not categoria_id:
+            abort(400, "Todos os campos são obrigatórios.")
+
+        try:
+            categoria_id = int(categoria_id)
+        except (TypeError, ValueError):
+            abort(400, "Categoria inválida.")
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (id,))
+        if not cursor.fetchone():
+            conn.close()
+            abort(404, "Plano não encontrado.")
+
+        cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (categoria_id,))
+        if not cursor.fetchone():
+            conn.close()
+            abort(400, "Categoria não encontrada.")
+
+        cursor.execute("SELECT id FROM plano_contas WHERE codigo = ? AND id != ?", (codigo, id))
+        if cursor.fetchone():
+            conn.close()
+            abort(400, "Já existe outro plano com este código.")
+
+        try:
+            cursor.execute("""
+                UPDATE plano_contas
+                SET codigo = ?, nome = ?, categoria_id = ?
+                WHERE id = ?
+            """, (codigo, nome, categoria_id, id))
+
+            conn.commit()
+
+        except Exception as e:
+            conn.rollback()
+            print(e)
+            abort(500, "Erro ao atualizar plano.")
+
+        conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+# REMOVER PLANO
+@app.route("/plano_contas/plano/remover/<int:id>", methods=["POST"])
+def remover_plano_conta(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Plano não existe.")
+
+    # Segurança: verificar vínculos
+    cursor.execute("SELECT id FROM contas_pagar WHERE plano_conta_id = ? LIMIT 1", (id,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Plano vinculado a contas a pagar.")
+
+    cursor.execute("SELECT id FROM contas_receber WHERE plano_conta_id = ? LIMIT 1", (id,))
+    if cursor.fetchone():
+        conn.close()
+        abort(400, "Plano vinculado a contas a receber.")
+
+    try:
+        cursor.execute("DELETE FROM plano_contas WHERE id = ?", (id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        abort(500, "Erro ao remover plano.")
+
+    conn.close()
+
+    return redirect(url_for("plano_contas"))
+
+
 
 def criar_banco():
     conn = get_db()
@@ -1154,6 +2263,21 @@ def criar_banco():
             FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
             FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
             FOREIGN KEY (evento_id) REFERENCES eventos(id),
+            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS movimentacoes_bancarias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conta_bancaria_id INTEGER NOT NULL,
+            tipo TEXT CHECK(tipo IN ('entrada', 'saida', 'estorno')) NOT NULL,
+            valor REAL NOT NULL,
+            data TEXT NOT NULL,
+            origem TEXT,
+            origem_id INTEGER,
+            descricao TEXT,
+            transferencia_id INTEGER,
             FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
         )
     ''')

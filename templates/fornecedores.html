@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Fornecedores</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber">💵 Contas a Receber</a>
+                <a href="/fornecedores" class="active">🏢 Fornecedores</a>
+                <a href="/plano_contas">📓 Plano de Contas</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>🏢 Fornecedores</h1>
+            </div>
+
+            <div class="container">
+                <section class="card">
+                    <h2>Ações</h2>
+                    <button type="button" class="btn-primary" onclick="abrirModalNovo()">✚ Novo Fornecedor</button>
+                </section>
+
+                <section class="list-section">
+                    <div class="card">
+                        <h2>Lista de Fornecedores</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Telefone</th>
+                                    <th>E-mail</th>
+                                    <th>CPF</th>
+                                    <th>CNPJ</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for fornecedor in lista_fornecedores %}
+                                <tr>
+                                    <td>{{ fornecedor[1] }}</td>
+                                    <td>{{ fornecedor[2] or '—' }}</td>
+                                    <td>{{ fornecedor[3] or '—' }}</td>
+                                    <td>{{ fornecedor[4] or '—' }}</td>
+                                    <td>{{ fornecedor[5] or '—' }}</td>
+                                    <td>
+                                        <a href="/fornecedores/editar/{{ fornecedor[0] }}" class="btn-edit">✏️ Editar</a>
+
+                                        <form action="/fornecedores/remover/{{ fornecedor[0] }}" method="POST" style="display:inline">
+                                            <button
+                                                type="submit"
+                                                class="btn-delete"
+                                                onclick="return confirm('Tem certeza que deseja excluir este fornecedor?')">
+                                                🗑️
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6">Nenhum fornecedor encontrado.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <div id="modalNovoFornecedor" class="modal">
+                <div class="modal-content">
+                    <h3>Novo Fornecedor</h3>
+
+                    <form method="POST" action="{{ url_for('novo_fornecedor') }}">
+                        <div class="form-grid">
+                            <div class="form-field full">
+                                <label>Nome</label>
+                                <input type="text" name="nome" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Telefone</label>
+                                <input type="text" name="telefone">
+                            </div>
+
+                            <div class="form-field">
+                                <label>E-mail</label>
+                                <input type="email" name="email">
+                            </div>
+
+                            <div class="form-field">
+                                <label>CPF</label>
+                                <input type="text" name="cpf">
+                            </div>
+
+                            <div class="form-field">
+                                <label>CNPJ</label>
+                                <input type="text" name="cnpj">
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">Salvar</button>
+                            <button type="button" class="btn-secondary" onclick="fecharModalNovo()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <script>
+                function abrirModalNovo() {
+                    document.getElementById("modalNovoFornecedor").style.display = "flex";
+                }
+
+                function fecharModalNovo() {
+                    document.getElementById("modalNovoFornecedor").style.display = "none";
+                }
+
+                window.onclick = function(event) {
+                    const modal = document.getElementById("modalNovoFornecedor");
+                    if (event.target === modal) {
+                        modal.style.display = "none";
+                    }
+                }
+            </script>
+        </main>
+    </div>
+</body>
+</html>

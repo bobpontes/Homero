@@ -338,10 +338,6 @@ th {
     letter-spacing: 0.02em;
 }
 
-tr:nth-child(even) {
-    background: rgba(0, 0, 0, 0.02);
-}
-
 td .btn-edit,
 td .btn-delete,
 td .btn-pagar {
@@ -389,16 +385,45 @@ table tr:hover {
     font-weight: bold;
 }
 
-tr.linha-vencida td {
-    background: rgba(231, 76, 60, 0.08);
+
+tr.linha-paga:hover td {
+    background: #bfe5d0;
+}
+
+tr.linha-pendente:hover td {
+    background: #fff2b3;
+}
+
+tr.linha-vencida:hover td {
+    background: #ffd6d6;
 }
 
 tr.linha-vencida td:first-child {
     border-left: 4px solid #e74c3c;
 }
 
-tr.linha-vencida:hover td {
-    background: rgba(231, 76, 60, 0.15);
+tr.linha-pendente td:first-child {
+    border-left: 4px solid #f1c40f;
+}
+
+tr.linha-paga td:first-child {
+    border-left: 4px solid #27ae60;
+}
+
+tr.linha-paga:nth-child(even) td {
+    background: #cfeedd;
+}
+
+tr.linha-paga:nth-child(even):hover td {
+    background: #bfe5d0;
+}
+
+tr.linha-pendente:nth-child(even) td {
+    background: #fff2b3;
+}
+
+tr.linha-vencida:nth-child(even) td {
+    background: #ffd6d6;
 }
 
 /* ===== DASHBOARD FINANCEIRO ===== */
@@ -627,6 +652,7 @@ canvas {
 .saldo {
     font-weight: 600;
     color: #2ecc71;
+    white-space: nowrap;
 }
 
 .saldo-total {
@@ -636,4 +662,33 @@ canvas {
 
 .negativo {
     color: #e74c3c;
+}
+
+.positivo {
+    color: #3ce759;
+}
+
+.neutro {
+    color: #e2cc3c;
+}
+
+.descricao {
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.categoria-row {
+    background: #f0f0f0;
+    font-weight: bold;
+    border-top: 2px solid #ddd;
+}
+
+.plano-row {
+    color: #555;
+}
+
+.plano-row td:first-child {
+    padding-left: 30px;
 }
