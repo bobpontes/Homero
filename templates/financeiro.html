@@ -129,6 +129,18 @@
                                     <td>
                                         {% if m[4] != 'Pago' %}
 
+                                        <button
+                                            type="button"
+                                            class="btn-edit"
+                                            data-id="{{ m[0] }}"
+                                            data-aluno="{{ m[1] }}"
+                                            data-data="{{ m[3] }}"
+                                            data-valor="{{ m[2] }}"
+                                            onclick="abrirModalAtualizarValor(this)"
+                                        >
+                                            ✏️
+                                        </button>
+
                                         <button class="btn-pagar" onclick="abrirModal({{ m[0] }})">✅</button>
                                         <form action="/mensalidade/remover/{{ m[0] }}" method="POST" style="display:inline">
                                             <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta mensalidade?')">🗑️</button>
@@ -189,6 +201,55 @@
                 </div>
              </div>
 
+            <!-- Modal de Atualizar Valor da Mensalidade -->
+            <div id="modalAtualizarValor" class="modal">
+                <div class="modal-content">
+                    <h3>Atualizar Valor</h3>
+
+                    <form id="formAtualizarValor" method="POST">
+                        <div class="form-grid">
+                            <div class="form-field" style="grid-column: 1 / -1;">
+                                <label>Aluno</label>
+                                <input type="text" id="atualizarAlunoNome" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>ID da Parcela</label>
+                                <input type="text" id="atualizarParcelaId" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Data</label>
+                                <input type="text" id="atualizarDataVencimento" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Valor da parcela</label>
+                                <input type="text" id="atualizarValorParcela" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Novo Valor</label>
+                                <input
+                                    type="number"
+                                    name="novo_valor"
+                                    id="atualizarNovoValor"
+                                    step="0.01"
+                                    min="0.01"
+                                    required
+                                >
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-pagar">Atualizar</button>
+                            <button type="button" class="btn-editar" onclick="fecharModalAtualizarValor()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+
             <!-- Modal de Pagamento --> 
             <div id="modalPagamento" class="modal">
                 <div class="modal-content">
@@ -232,30 +293,53 @@
 
             <!-- JavaScript para fazer o Modal de Pagamento funcionar -->
             <script>
-            
-            function abrirModal(id) {
+                function abrirModal(id) {
+                    const modal = document.getElementById("modalPagamento")
+                    const form = document.getElementById("formPagamento")
 
-                const modal = document.getElementById("modalPagamento")
-                const form = document.getElementById("formPagamento")
-            
-                form.action = "/pagar/"+ id
+                    form.action = "/pagar/" + id
+                    modal.style.display = "flex"
+                }
 
-                modal.style.display = "flex"
-            }
+                function fecharModal() {
+                    document.getElementById("modalPagamento").style.display = "none"
+                }
 
-            function fecharModal() {
-                document.getElementById("modalPagamento").style.display = "none"
-            }
+                function abrirModalNova() {
+                    document.getElementById("modalNovaMensalidade").style.display = "flex"
+                }
 
-            function abrirModalNova() {
-                document.getElementById("modalNovaMensalidade").style.display = "flex"
-            }
+                function fecharModalNova() {
+                    document.getElementById("modalNovaMensalidade").style.display = "none"
+                }
 
-            function fecharModalNova() {
-                document.getElementById("modalNovaMensalidade").style.display = "none"
-            }
+                function abrirModalAtualizarValor(botao) {
+                    const modal = document.getElementById("modalAtualizarValor")
+                    const form = document.getElementById("formAtualizarValor")
+
+                    const id = botao.dataset.id
+                    const aluno = botao.dataset.aluno
+                    const data = botao.dataset.data
+                    const valor = botao.dataset.valor
+
+                    form.action = "/mensalidade/atualizar_valor/" + id
+
+                    document.getElementById("atualizarAlunoNome").value = aluno
+                    document.getElementById("atualizarParcelaId").value = id
+                    document.getElementById("atualizarDataVencimento").value = data.replace(/-/g, "/")
+                    document.getElementById("atualizarValorParcela").value = "R$ " + Number(valor).toFixed(2).replace(".", ",")
+                    document.getElementById("atualizarNovoValor").value = Number(valor).toFixed(2)
+
+                    modal.style.display = "flex"
+                }
+
+                function fecharModalAtualizarValor() {
+                    document.getElementById("modalAtualizarValor").style.display = "none"
+                }
             </script>
+
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
             <script>
                 const ctx = document.getElementById('graficoFinanceiro').getContext('2d');
 
@@ -287,6 +371,7 @@
                     }
                 });
             </script>
+
         </main>
     </div>
 </body>

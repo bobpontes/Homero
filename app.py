@@ -380,6 +380,69 @@ def nova_mensalidade():
     conn.close()
     abort(400, "Todos os campos são obrigatórios.")
 
+@app.route("/mensalidade/atualizar_valor/<int:id>", methods=["POST"])
+def atualizar_valor_mensalidade(id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    novo_valor = request.form.get("novo_valor")
+
+    if not novo_valor:
+        conn.close()
+        abort(400, "O novo valor é obrigatório.")
+
+    try:
+        novo_valor = float(novo_valor)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Novo valor inválido.")
+
+    if novo_valor <= 0:
+        conn.close()
+        abort(400, "O novo valor deve ser maior que zero.")
+
+    cursor.execute("""
+        SELECT id, aluno_id, status
+        FROM mensalidades
+        WHERE id = ?
+    """, (id,))
+    mensalidade = cursor.fetchone()
+
+    if not mensalidade:
+        conn.close()
+        abort(404)
+
+    _, aluno_id, status = mensalidade
+
+    if status != "pendente":
+        conn.close()
+        abort(400, "Só é possível editar mensalidades pendentes.")
+
+    cursor.execute("SELECT id FROM alunos WHERE id = ?", (aluno_id,))
+    aluno = cursor.fetchone()
+
+    if not aluno:
+        conn.close()
+        abort(400, "Aluno vinculado à mensalidade não foi encontrado.")
+
+    try:
+        cursor.execute("""
+            UPDATE mensalidades
+            SET valor = ?
+            WHERE id = ?
+              AND status = 'pendente'
+        """, (novo_valor, id))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        conn.close()
+        raise
+
+    conn.close()
+    return redirect(url_for("financeiro"))
 
 
 @app.route("/pagar/<int:id>", methods=["POST"])
