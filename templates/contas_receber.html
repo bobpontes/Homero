@@ -142,7 +142,22 @@
                                 <td>
                                     {% if r[4] != 'Pago' %}
 
+                                    <button
+                                        type="button"
+                                        class="btn-edit"
+                                        data-id="{{ r[0] }}"
+                                        data-descricao="{{ r[1] }}"
+                                        data-valor="{{ r[2] }}"
+                                        data-data="{{ r[3] }}"
+                                        data-plano-id="{{ r[8] }}"
+                                        data-fornecedor-id="{{ r[9] }}"
+                                        onclick="abrirModalEditarContaReceber(this)"
+                                    >
+                                        ✏️
+                                    </button>
+
                                     <button class="btn-pagar" onclick="abrirModal({{ r[0] }})">💳</button>
+                                    
                                     <form action="/contas_receber/remover/{{ r[0] }}" method="POST" style="display:inline">
                                         <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta conta?')">🗑️</button>
                                     </form>
@@ -221,6 +236,61 @@
     </div>
     </div>
 
+    <!-- Modal de Edição de Conta a Receber -->
+    <div id="modalEditarContaReceber" class="modal">
+        <div class="modal-content">
+            <h3>Atualizar Conta a Receber</h3>
+
+            <form id="formEditarContaReceber" method="POST">
+                <div class="form-grid">
+                    <div class="form-field" style="grid-column: 1 / -1;">
+                        <label>Descrição</label>
+                        <input type="text" name="descricao" id="editarContaReceberDescricao" required>
+                    </div>
+
+                    <div class="form-field">
+                        <label>ID da Conta</label>
+                        <input type="text" id="editarContaReceberId" readonly>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Data de vencimento</label>
+                        <input type="date" name="data_vencimento" id="editarContaReceberData" required>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Valor</label>
+                        <input type="number" name="valor" id="editarContaReceberValor" step="0.01" min="0.01" required>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Plano de Contas</label>
+                        <select name="plano_conta_id" id="editarContaReceberPlano" required>
+                            {% for p in planos %}
+                                <option value="{{ p[0] }}">{{ p[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Cliente</label>
+                        <select name="fornecedor_id" id="editarContaReceberFornecedor" required>
+                            {% for f in fornecedores %}
+                                <option value="{{ f[0] }}">{{ f[1] }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn-pagar">Salvar</button>
+                    <button type="button" class="btn-editar" onclick="fecharModalEditarContaReceber()">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
     <!-- Modal de Pagamento --> 
     <div id="modalPagamento" class="modal">
         <div class="modal-content">
@@ -292,6 +362,34 @@
     function fecharModalNova() {
         document.getElementById("modalNovaConta").style.display = "none"
     }
+
+    function abrirModalEditarContaReceber(botao) {
+        const modal = document.getElementById("modalEditarContaReceber")
+        const form = document.getElementById("formEditarContaReceber")
+
+        const id = botao.dataset.id
+        const descricao = botao.dataset.descricao
+        const valor = botao.dataset.valor
+        const data = botao.dataset.data
+        const planoId = botao.dataset.planoId
+        const fornecedorId = botao.dataset.fornecedorId
+
+        form.action = "/contas_receber/atualizar/" + id
+
+        document.getElementById("editarContaReceberId").value = id
+        document.getElementById("editarContaReceberDescricao").value = descricao
+        document.getElementById("editarContaReceberValor").value = Number(valor).toFixed(2)
+        document.getElementById("editarContaReceberData").value = data
+        document.getElementById("editarContaReceberPlano").value = planoId
+        document.getElementById("editarContaReceberFornecedor").value = fornecedorId
+
+        modal.style.display = "flex"
+    }
+
+    function fecharModalEditarContaReceber() {
+        document.getElementById("modalEditarContaReceber").style.display = "none"
+    }
+
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

@@ -1198,7 +1198,9 @@ def contas_receber():
                 ELSE 'Pendente'
             END AS status,
             plano_contas.nome AS plano_conta,
-            fornecedores.nome AS fornecedor
+            fornecedores.nome AS fornecedor,
+            contas_receber.plano_conta_id,
+            contas_receber.fornecedor_id
         FROM contas_receber
         LEFT JOIN plano_contas
             ON contas_receber.plano_conta_id = plano_contas.id
@@ -1221,7 +1223,7 @@ def contas_receber():
 
     receitas_com_atraso = []
     for r in receitas:
-        id, descricao, valor, vencimento, status, plano_conta, fornecedor = r
+        id, descricao, valor, vencimento, status, plano_conta, fornecedor, plano_conta_id, fornecedor_id = r
 
         dias_atraso = 0
 
@@ -1230,7 +1232,7 @@ def contas_receber():
             dias_atraso = (date.today() - vencimento_data).days
         
         receitas_com_atraso.append(
-            (id, descricao, valor, vencimento, status, plano_conta, fornecedor, dias_atraso)
+            (id, descricao, valor, vencimento, status, plano_conta, fornecedor, dias_atraso, plano_conta_id, fornecedor_id)
         )
 
     receitas = receitas_com_atraso
@@ -1433,6 +1435,107 @@ def nova_receita():
     conn.commit()
     conn.close()
 
+    return redirect(url_for("contas_receber"))
+
+@app.route("/contas_receber/atualizar/<int:id>", methods=["POST"])
+def atualizar_conta_receber(id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    descricao = (request.form.get("descricao") or "").strip()
+    valor = request.form.get("valor")
+    data_vencimento = request.form.get("data_vencimento")
+    plano_conta_id = request.form.get("plano_conta_id")
+    fornecedor_id = request.form.get("fornecedor_id")
+    evento_id = request.form.get("evento_id")
+
+    if not descricao or not valor or not data_vencimento or not plano_conta_id or not fornecedor_id:
+        conn.close()
+        abort(400, "Todos os campos são obrigatórios.")
+
+    try:
+        valor = float(valor)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Valor inválido.")
+
+    if valor <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        datetime.strptime(data_vencimento, "%Y-%m-%d")
+    except ValueError:
+        conn.close()
+        abort(400, "Data de vencimento inválida.")
+
+    try:
+        plano_conta_id = int(plano_conta_id)
+        fornecedor_id = int(fornecedor_id)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Plano de conta ou fornecedor inválido.")
+
+    if evento_id:
+        try:
+            evento_id = int(evento_id)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Evento inválido.")
+
+        cursor.execute("SELECT id FROM eventos WHERE id = ?", (evento_id, ))
+        if not cursor.fetchone():
+            conn.close()
+            abort(400, "Evento não encontrado.")
+        
+    else:
+        evento_id = None
+
+    cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id,))
+    conta = cursor.fetchone()
+
+    if not conta:
+        conn.close()
+        abort(404)
+
+    status = conta[0]
+
+    if status != "pendente":
+        conn.close()
+        abort(400, "Só é possível editar contas pendentes.")
+
+    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Plano de conta não encontrado.")
+
+    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Fornecedor não encontrado.")
+
+    try:
+        cursor.execute("""
+            UPDATE contas_receber
+            SET descricao = ?,
+                valor = ?,
+                data_vencimento = ?,
+                plano_conta_id = ?,
+                fornecedor_id = ?,
+                evento_id = ?
+            WHERE id = ?
+              AND status = 'pendente'
+        """, (descricao, valor, data_vencimento, plano_conta_id, fornecedor_id, evento_id, id))
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        conn.close()
+        raise
+
+    conn.close()
     return redirect(url_for("contas_receber"))
 
 @app.route("/contas_receber/receber/<int:id>", methods=["POST"])
