@@ -620,6 +620,32 @@ canvas {
     grid-column: span 2;
 }
 
+.input-disabled {
+    color: #9ca3af;
+
+    border: 1px dashed rgba(0, 0, 0, 0.08);
+
+    cursor: not-allowed;
+
+    backdrop-filter: blur(4px);
+
+    pointer-events: none;
+}
+
+.modal-content .form-field input:not(.input-disabled),
+.modal-content .form-field select:not(.input-disabled) {
+    background: rgba(255, 255, 255, 0.95);
+}
+
+.modal-content .form-field input.input-disabled,
+.modal-content .form-field select.input-disabled {
+    background: #f3f4f6;
+    color: #9ca3af;
+    border: 1px solid #e5e7eb;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .linha-vencida {
     background: #ffe6e6;
 }
