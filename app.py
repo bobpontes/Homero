@@ -380,6 +380,8 @@ def nova_mensalidade():
     conn.close()
     abort(400, "Todos os campos são obrigatórios.")
 
+# Rotas para atualização de valores: (1 - Mens individual, 2 - tela de grupo de parcelas, 3 - edição de parcelas de um grupo em lote)
+# 1
 @app.route("/mensalidade/atualizar_valor/<int:id>", methods=["POST"])
 def atualizar_valor_mensalidade(id):
     conn = get_db()
@@ -443,6 +445,156 @@ def atualizar_valor_mensalidade(id):
 
     conn.close()
     return redirect(url_for("financeiro"))
+
+# 2
+@app.route("/mensalidade/grupo/<int:grupo_id>")
+def editar_grupo_mensalidade(grupo_id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT m.id,
+               m.aluno_id,
+               a.nome,
+               m.valor,
+               m.data_vencimento,
+               m.status,
+               m.grupo_parcela_id
+        FROM mensalidades m
+        JOIN alunos a ON a.id = m.aluno_id
+        WHERE m.grupo_parcela_id = ?
+        ORDER BY m.data_vencimento ASC, m.id ASC
+    """, (grupo_id,))
+    parcelas = cursor.fetchall()
+
+    if not parcelas:
+        conn.close()
+        abort(404)
+
+    aluno_ids = {p[1] for p in parcelas}
+    if len(aluno_ids) != 1:
+        conn.close()
+        abort(400, "Grupo de parcelas inconsistente.")
+
+    primeira_pendente = None
+
+    for p in parcelas:
+        if p[5] == "pendente":
+            primeira_pendente = p[4]
+            break
+
+    parcelas_pendentes = []
+    parcelas_pagas = []
+
+    for p in parcelas:
+        if p[5] == "pendente":
+            parcelas_pendentes.append(p)
+        else:
+            parcelas_pagas.append(p)
+
+    conn.close()
+    return render_template(
+        "mensalidade_grupo.html",
+        grupo_id=grupo_id,
+        parcelas=parcelas,
+        aluno_nome=parcelas[0][2],
+        primeira_pendente=primeira_pendente,
+        parcelas_pendentes=parcelas_pendentes,
+        parcelas_pagas=parcelas_pagas
+    )
+
+# 3
+@app.route("/mensalidade/grupo/<int:grupo_id>/atualizar_valor", methods=["POST"])
+def atualizar_grupo_mensalidade(grupo_id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    novo_valor = request.form.get("novo_valor")
+    data_inicial = request.form.get("data_vencimento_inicial")
+
+    if not novo_valor or not data_inicial:
+        conn.close()
+        abort(400, "Todos os campos são obrigatórios.")
+
+    cursor.execute("""
+        SELECT COUNT(DISTINCT aluno_id)
+        FROM mensalidades
+        WHERE grupo_parcela_id = ?
+    """, (grupo_id, ))
+
+    if cursor.fetchone()[0] != 1:
+        conn.close()
+        abort(400, "Grupo inconsistente: contém mensalidades de mais de um aluno.")
+
+    try:
+        novo_valor = float(novo_valor)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Novo valor inválido.")
+
+    if novo_valor <= 0:
+        conn.close()
+        abort(400, "O novo valor deve ser maior que zero.")
+
+    try:
+        datetime.strptime(data_inicial, "%Y-%m-%d")
+    except ValueError:
+        conn.close()
+        abort(400, "Data de vencimento inválida.")
+
+    cursor.execute("SELECT id FROM mensalidades WHERE grupo_parcela_id = ?", (grupo_id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(404)
+
+    # Buscar a primeira data de parcela pendente no banco:
+    cursor.execute("""
+        SELECT MIN(data_vencimento)
+        FROM mensalidades
+        WHERE grupo_parcela_id = ?
+        AND status = 'pendente'
+    """, (grupo_id,))
+    resultado = cursor.fetchone()
+    primeira_pendente = resultado[0] if resultado and resultado[0] else None
+
+    # transformar data de string para data:
+    data_inicial_date = datetime.strptime(data_inicial, "%Y-%m-%d").date()
+    if primeira_pendente:
+        primeira_pendente_date = datetime.strptime(primeira_pendente, "%Y-%m-%d").date()
+
+        if primeira_pendente and data_inicial_date < primeira_pendente_date:
+            data_inicial = primeira_pendente
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM mensalidades
+        WHERE grupo_parcela_id = ?
+          AND status = 'pendente'
+          AND date(data_vencimento) >= date(?)
+    """, (grupo_id, data_inicial))
+    total = cursor.fetchone()[0]
+
+    if total == 0:
+        conn.close()
+        abort(400, "Não existem parcelas pendentes para atualizar a partir desta data.")
+
+    try:
+        cursor.execute("""
+            UPDATE mensalidades
+            SET valor = ?
+            WHERE grupo_parcela_id = ?
+              AND status = 'pendente'
+              AND date(data_vencimento) >= date(?)
+        """, (novo_valor, grupo_id, data_inicial))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        conn.close()
+        raise
+
+    conn.close()
+    return redirect(url_for("editar_grupo_mensalidade", grupo_id=grupo_id))
 
 
 @app.route("/pagar/<int:id>", methods=["POST"])
@@ -2570,7 +2722,7 @@ def inserir_aluno(nome, idade, turma):
 criar_banco()
 
 # cria um backup automático do banco sempre que o sistema iniciar
-backup_banco()
+# backup_banco()
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
