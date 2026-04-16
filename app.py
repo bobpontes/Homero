@@ -1078,6 +1078,7 @@ def registrar_conta(id):
     metodo_pagamento = request.form.get("metodo_pagamento")
     conta_bancaria_id = request.form.get("conta_bancaria_id")
     valor_pago = request.form.get("valor_pago")
+    nova_descricao = request.form.get("descricao")
 
     if not data_pagamento or not metodo_pagamento or not conta_bancaria_id:
         abort(400, "Todos os dados são obrigatórios.")
@@ -1132,11 +1133,22 @@ def registrar_conta(id):
         conn.close()
         abort(400, "Valor deve ser maior que zero.")
 
+    if nova_descricao and nova_descricao.strip():
+        nova_descricao = nova_descricao.strip()
+    else:
+        nova_descricao = descricao
+
     try:
         # 5) Registrar o pagamento da conta:
         cursor.execute("""
-            UPDATE contas_pagar SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
-            (data_pagamento, metodo_pagamento, conta_bancaria_id, id)
+            UPDATE contas_pagar
+                       SET status = 'pago',
+                       data_pagamento = ?,
+                       metodo_pagamento = ?,
+                       conta_bancaria_id = ?,
+                       descricao = ?
+                       WHERE id = ?""",
+            (data_pagamento, metodo_pagamento, conta_bancaria_id, nova_descricao, id)
         )
 
         # 6) Atualizar tabela movimentacoes_bancarias:
@@ -1149,7 +1161,7 @@ def registrar_conta(id):
             valor,
             data_pagamento,
             id,
-            f"Pagamento - {descricao} (ID {id})"
+            f"Pagamento - {nova_descricao} (ID {id})"
         ))
 
         # 7) Atualizar saldo da conta bancária:

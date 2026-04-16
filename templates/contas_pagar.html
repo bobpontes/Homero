@@ -97,7 +97,16 @@
                                             ✏️
                                         </button>
 
-                                        <button class="btn-pagar" onclick="abrirModal({{ c[0] }})">💳</button>
+                                        <button
+                                            class="btn-pagar"
+                                            data-id="{{ c[0] }}"
+                                            data-descricao="{{ c[1] }}"
+                                            data-valor="{{ c[2] }}"
+                                            data-data="{{ c[3] }}"
+                                            onclick="abrirModal(this)"
+                                        >
+                                            💳
+                                        </button>
                                         <form action="/contas_pagar/remover/{{ c[0] }}" method="POST" style="display:inline">
                                             <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta conta?')">🗑️</button>
                                         </form>
@@ -232,31 +241,69 @@
                     <h3>Registrar Pagamento</h3>
 
                     <form id="formPagamento" method="POST">
+                        <div class="form-grid">
+                            <div class="row" style="grid-column: 1 / -1;">
+                                <div class="col-2">
+                                    <div class="form-field">
+                                        <label>ID</label>
+                                        <input class="input-disabled" type="text" id="pagamentoId" name="id" readonly>
+                                    </div>
+                                    
+                                </div>
+                                <div class="col-10">
+                                    <div class="form-field">
+                                        <label>Descrição</label>
+                                        <input type="text" name="descricao" id="pagamentoDescricao">
+                                    </div>
+                                    
+                                </div>
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Data de vencimento</label>
+                                <input class="input-disabled" type="text" id="pagamentoDataVencimento" name="data_vencimento" readonly>
+                            </div>
 
-                        <label>Data do pagamento</label>
-                        <input type="date" name="data_pagamento" required>
+                            <div class="form-field">
+                                <label>Valor Original</label>
+                                <input class="input-disabled" type="text" id="pagamentoValor" name="valor_original" readonly>
+                            </div>
 
-                        <label>Valor Pago</label>
-                        <input type="number" step="0.01" name="valor_pago" placeholder="Valor pago (opcional, preencha apenas se for diferente do valor da conta)">
-                        
-                        <label>Método de pagamento</label>
-                        <select name="metodo_pagamento" required>
-                            <option value="pix">Pix</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="Cartão">Cartão</option>
-                            <option value="Boleto">Boleto</option>
-                        </select>
+                            <div class="form-field">
+                                <label>Data do pagamento</label>
+                                <input type="date" name="data_pagamento" required>
+                            </div>
 
-                        <label>Conta Bancária</label>
-                        <select name="conta_bancaria_id" required>
-                            <option value="">Selecione uma conta</option>
-                            {% for conta in contas_banco %}
-                            <option value="{{ conta[0] }}">{{ conta[1] }}</option>
-                            {% endfor %}
-                        </select>
+                            <div class="form-field">
+                                <label>Valor Pago</label>
+                                <input type="number" step="0.01" name="valor_pago" placeholder="Valor pago (opcional)">
+                            </div>
+                            
+                            <div class="form-field">
+                                <label>Método de pagamento</label>
+                                <select name="metodo_pagamento" required>
+                                    <option value="pix">Pix</option>
+                                    <option value="Dinheiro">Dinheiro</option>
+                                    <option value="Cartão">Cartão</option>
+                                    <option value="Boleto">Boleto</option>
+                                </select>
+                            </div>
 
-                        <button type="submit">Confirmar Pagamento</button>
-                        <button type="button" onclick="fecharModal()">Cancelar</button>
+                            <div class="form-field">
+                            <label>Conta Bancária</label>
+                                <select name="conta_bancaria_id" required>
+                                    <option value="">Selecione uma conta</option>
+                                    {% for conta in contas_banco %}
+                                    <option value="{{ conta[0] }}">{{ conta[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button class="btn-primary" type="submit">Confirmar Pagamento</button>
+                            <button class="btn-secondary" type="button" onclick="fecharModal()">Cancelar</button>
+                        </div>
                     </form>
                         
                 </div>
@@ -265,12 +312,22 @@
             <!-- JavaScript para fazer o Modal de Pagamento funcionar -->
             <script>
             
-            function abrirModal(id) {
+            function abrirModal(botao) {
 
                 const modal = document.getElementById("modalPagamento")
                 const form = document.getElementById("formPagamento")
             
-                form.action = "/contas_pagar/pagar/"+ id
+                const id = botao.dataset.id
+                const descricao = botao.dataset.descricao
+                const valor = botao.dataset.valor
+                const data = botao.dataset.data
+
+                form.action = "/contas_pagar/pagar/" + id
+
+                document.getElementById("pagamentoId").value = id
+                document.getElementById("pagamentoDescricao").value = descricao
+                document.getElementById("pagamentoValor").value = Number(valor).toFixed(2)
+                document.getElementById("pagamentoDataVencimento").value = data
 
                 modal.style.display = "flex"
             }
