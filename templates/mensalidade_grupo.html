@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Grupos de Mensalidades</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro" class="active">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber">💵 Contas a Receber</a>
+                <a href="/fornecedores">🏢 Fornecedores</a>
+                <a href="/plano_contas">📓 Plano de Contas</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>🧩 Grupo de Parcelas</h1>
+            </div>
+
+            <div class="container">
+                <section class="card">
+                    <h2>Aluno: {{ aluno_nome }}</h2>
+                    <p class="subtitulo">As parcelas pagas ficam bloqueadas. As pendentes podem ser ajustadas individualmente ou em lote.</p>
+
+                    <form method="POST" action="{{ url_for('atualizar_grupo_mensalidade', grupo_id=grupo_id) }}">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Aplicar novo valor a partir do vencimento</label>
+                                <input type="date" name="data_vencimento_inicial" value="{{ primeira_pendente }}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Novo valor</label>
+                                <input type="number" name="novo_valor" step="0.01" min="0.01" required>
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">Aplicar em Lote</button>
+                            <a href="{{ url_for('listar_grupos_mensalidades') }}" class="btn-secondary">Voltar para Grupos</a>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="list-section">
+                    <div class="card">
+                        <h2>Parcelas do Grupo</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Parcela</th>
+                                    <th>Vencimento</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {% for p in parcelas %}
+                                <tr class="{% if p[5] == 'pago' %}linha-paga{% else %}linha-pendente{% endif %}">
+                                    <td>#{{ p[0] }}</td>
+                                    <td>{{ p[4]|replace("-", "/") }}</td>
+                                    <td>R$ {{ "%.2f"|format(p[3]) }}</td>
+                                    <td>
+                                        {% if p[5] == 'pago' %}
+                                            <span class="status-pago">🟢 Pago</span>
+                                        {% else %}
+                                            <span class="status-pendente">🟡 Pendente</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if p[5] == 'pendente' %}
+                                        <button
+                                            type="button"
+                                            class="btn-edit"
+                                            data-id="{{ p[0] }}"
+                                            data-valor="{{ p[3] }}"
+                                            data-data="{{ p[4] }}"
+                                            onclick="abrirModalEditarParcelaGrupo(this)"
+                                        >
+                                            ✏️
+                                        </button>
+                                        {% else %}
+                                        <span style="opacity: 0.6;">🔒 Bloqueada</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Modal para edição individual de uma parcela -->
+             <div id="modalEditarParcelaGrupo" class="modal">
+                <div class="modal-content">
+                    <h3>Atualizar Parcela do Grupo</h3>
+
+                    <form id="formEditarParcelaGrupo" method="POST">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>ID da Parcela</label>
+                                <input class="input-disabled" type="text" id="grupoParcelaId" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Data de vencimento</label>
+                                <input class="input-disabled" type="text" id="grupoParcelaData" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Valor atual</label>
+                                <input class="input-disabled" type="text" id="grupoParcelaValorAtual" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Novo valor</label>
+                                <input type="number" name="novo_valor" id="grupoParcelaNovoValor" step="0.01" min="0.01" required>
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-pagar">Atualizar</button>
+                            <button type="button" class="btn-secondary" onclick="fecharModalEditarParcelaGrupo()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Javascrip p/ modal-->
+             <script>
+            function abrirModalEditarParcelaGrupo(botao) {
+                const id = botao.dataset.id
+                const valor = botao.dataset.valor
+                const data = botao.dataset.data
+
+                const modal = document.getElementById("modalEditarParcelaGrupo")
+                const form = document.getElementById("formEditarParcelaGrupo")
+
+                form.action = "/mensalidade/grupo/{{ grupo_id }}/parcela/" + id + "/atualizar_valor"
+
+                document.getElementById("grupoParcelaId").value = id
+                document.getElementById("grupoParcelaData").value = data.replace(/-/g, "/")
+                document.getElementById("grupoParcelaValorAtual").value = "R$ " + Number(valor).toFixed(2).replace(".", ",")
+                document.getElementById("grupoParcelaNovoValor").value = Number(valor).toFixed(2)
+
+                modal.style.display = "flex"
+            }
+
+            function fecharModalEditarParcelaGrupo() {
+                document.getElementById("modalEditarParcelaGrupo").style.display = "none"
+            }
+            </script>
+
+        </main>
+    </div>
+</body>
+</html>
