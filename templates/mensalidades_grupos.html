@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Grupos de Mensalidades</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber">💵 Contas a Receber</a>
+                <a href="/fornecedores">🏢 Fornecedores</a>
+                <a href="/plano_contas" class="active">📓 Plano de Contas</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>🧩 Grupos de Parcelas</h1>
+            </div>
+
+            <div class="container">
+                <section class="list-section">
+                    <div class="card">
+                        <h2>Grupos existentes</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Grupo</th>
+                                    <th>Aluno</th>
+                                    <th>Parcelas</th>
+                                    <th>Pagas</th>
+                                    <th>Pendentes</th>
+                                    <th>Período</th>
+                                    <th>Em aberto</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for g in grupos %}
+                                <tr class="{% if g[4] > 0 %}linha-pendente{% else %}linha-paga{% endif %}">
+                                    <td>#{{ g[0] }}</td>
+                                    <td>{{ g[1] }}</td>
+                                    <td>{{ g[2] }}</td>
+                                    <td>{{ g[3] }}</td>
+                                    <td>{{ g[4] }}</td>
+                                    <td>{{ g[5]|replace("-", "/") }} até {{ g[6]|replace("-", "/") }}</td>
+                                    <td>R$ {{ "%.2f"|format(g[7] or 0) }}</td>
+                                    <td>
+                                        <a href="{{ url_for('detalhar_grupo_mensalidade', grupo_id=g[0]) }}" class="btn-edit">
+                                            Abrir Grupo
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <div class="modal-actions">
+                            <a href="{{ url_for('financeiro') }}" class="btn-secondary">Voltar</a>
+                        </div>
+                    </div>
+                </section>
+            
+            </div>
+        </main>
+    </div>
+</body>
+</html>

@@ -93,7 +93,16 @@
 
                     <section class="card">
                         <h2>Ações</h2>
-                        <button class="btn-pagar" onclick="abrirModalNova()">✚ Nova Mensalidade</button>
+
+                        <div class="form-actions" style="justify-content: flex-start;">
+                            <button class="btn-pagar" onclick="abrirModalNova()">✚ Nova Mensalidade</button>
+                            <a href="{{ url_for('listar_grupos_mensalidades') }}" class="btn-edit">
+                                🧩 Editar Grupos de Parcelas
+                            </a>
+                        </div>
+                        <p class="subtitulo">
+                            Gerencie parcelas vinculadas em uma tela própria, com edição individual e em lote.
+                        </p>
                     </section>
                 
                     <section class="list-section">
