@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Grupos de Recebimentos</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber" class="active">💵 Contas a Receber</a>
+                <a href="/fornecedores">🏢 Fornecedores</a>
+                <a href="/plano_contas">📓 Plano de Contas</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>🧩 Grupos de Recebimentos</h1>
+            </div>
+
+            <div class="container">
+                <section class="card">
+                    <h2>{{ descricao_grupo }}</h2>
+                    <p class="subtitulo">As parcelas pagas ficam bloqueadas. As pendentes podem ser ajustadas individualmente ou em lote.</p>
+
+                    <form method="POST" action="{{ url_for('atualizar_grupo_conta_receber', grupo_id=grupo_id) }}">
+                        <div class="form-grid">
+                            <div class="form-field">
+                                <label>Aplicar alterações a partir do vencimento</label>
+                                <input type="date" name="data_vencimento_inicial" value="{{ primeira_pendente }}" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Novo valor</label>
+                                <input type="number" name="novo_valor" step="0.01" min="0.01" placeholder="Opcional">
+                            </div>
+
+                            <div class="form-field" style="grid-column: 1 / -1;">
+                                <label>Nova descrição</label>
+                                <input type="text" name="nova_descricao" placeholder="Opcional">
+                            </div>
+
+                            <div class="form-field">
+                                <label>Novo plano de contas</label>
+                                <select name="novo_plano_conta_id">
+                                    <option value="">Manter atual</option>
+                                    {% for p in planos %}
+                                        <option value="{{ p[0] }}">{{ p[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Novo Cliente</label>
+                                <select name="novo_fornecedor_id">
+                                    <option value="">Manter atual</option>
+                                    {% for f in fornecedores %}
+                                        <option value="{{ f[0] }}">{{ f[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">Aplicar em Lote</button>
+                            <a href="{{ url_for('listar_grupos_contas_receber') }}" class="btn-secondary">Voltar</a>
+                        </div>
+                    </form>
+
+                </section>
+
+                <section class="list-section">
+                    <div class="card">
+                        <h2>Parcelas do Grupo</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Descrição</th>
+                                    <th>Plano de Contas</th>
+                                    <th>Cliente</th>
+                                    <th>Vencimento</th>
+                                    <th>Valor</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in parcelas %}
+                                <tr class="{% if p[4] == 'pago' %}linha-paga{% else %}linha-pendente{% endif %}">
+                                    <td>#{{ p[0] }}</td>
+                                    <td>{{ p[1] }}</td>
+                                    <td>{{ p[7] or "—" }}</td>
+                                    <td>{{ p[8] or "—" }}</td>
+                                    <td>{{ p[3]|replace("-", "/") }}</td>
+                                    <td>R$ {{ "%.2f"|format(p[2]) }}</td>
+                                    <td>
+                                        {% if p[4] == 'pago' %}
+                                            <span class="status-pago">🟢 Pago</span>
+                                        {% else %}
+                                            <span class="status-pendente">🟡 Pendente</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if p[4] == 'pendente' %}
+                                        <button
+                                            type="button"
+                                            class="btn-edit"
+                                            data-id="{{ p[0] }}"
+                                            data-descricao="{{ p[1] }}"
+                                            data-valor="{{ p[2] }}"
+                                            data-data="{{ p[3] }}"
+                                            data-plano-id="{{ p[5] }}"
+                                            data-fornecedor-id="{{ p[6] }}"
+                                            onclick="abrirModalEditarParcelaGrupo(this)"
+                                        >
+                                            ✏️
+                                        </button>
+                                        {% else %}
+                                        <span style="opacity: 0.6;">🔒 Bloqueada</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- Modal de Edição de Parcela do Grupo -->
+            <div id="modalEditarContaPagarGrupo" class="modal">
+                <div class="modal-content">
+                    <h3>Atualizar Conta a Pagar</h3>
+
+                    <form id="formEditarContaPagarGrupo" method="POST">
+                        <div class="form-grid">
+                            <div class="form-field" style="grid-column: 1 / -1;">
+                                <label>Descrição</label>
+                                <input type="text" name="descricao" id="editarContaPagarGrupoDescricao" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>ID da Conta</label>
+                                <input class="input-disabled" type="text" id="editarContaPagarGrupoId" readonly>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Data de vencimento</label>
+                                <input type="date" name="data_vencimento" id="editarContaPagarGrupoData" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Valor</label>
+                                <input type="number" name="valor" id="editarContaPagarGrupoValor" step="0.01" min="0.01" required>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Plano de Contas</label>
+                                <select name="plano_conta_id" id="editarContaPagarGrupoPlano" required>
+                                    {% for p in planos %}
+                                        <option value="{{ p[0] }}">{{ p[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label>Cliente</label>
+                                <select name="fornecedor_id" id="editarContaPagarGrupoFornecedor" required>
+                                    {% for f in fornecedores %}
+                                        <option value="{{ f[0] }}">{{ f[1] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-pagar">Salvar</button>
+                            <button type="button" class="btn-editar" onclick="fecharModalEditarContaPagarGrupo()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+
+            <!-- Javascrip para Modal-->
+            <script>
+            function abrirModalEditarParcelaGrupo(botao) {
+                const modal = document.getElementById("modalEditarContaPagarGrupo")
+                const form = document.getElementById("formEditarContaPagarGrupo")
+
+                const id = botao.dataset.id
+                const descricao = botao.dataset.descricao
+                const valor = botao.dataset.valor
+                const data = botao.dataset.data
+                const planoId = botao.dataset.planoId
+                const fornecedorId = botao.dataset.fornecedorId
+
+                form.action = "/contas_receber/grupo/{{ grupo_id }}/parcela/" + id + "/atualizar"
+
+                document.getElementById("editarContaPagarGrupoId").value = id
+                document.getElementById("editarContaPagarGrupoDescricao").value = descricao
+                document.getElementById("editarContaPagarGrupoValor").value = Number(valor).toFixed(2)
+                document.getElementById("editarContaPagarGrupoData").value = data
+                document.getElementById("editarContaPagarGrupoPlano").value = planoId
+                document.getElementById("editarContaPagarGrupoFornecedor").value = fornecedorId
+
+                modal.style.display = "flex"
+            }
+
+            function fecharModalEditarContaPagarGrupo() {
+                document.getElementById("modalEditarContaPagarGrupo").style.display = "none"
+            }
+            </script>
+
+
+        </main>
+    </div>
+</body>
+</html>

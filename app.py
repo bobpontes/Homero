@@ -2140,6 +2140,270 @@ def listar_grupos_contas_receber():
 
     return render_template("contas_receber_grupos.html", grupos=grupos)
 
+# Detalhar um grupo de parcelas:
+@app.route("/contas_receber/grupo/<int:grupo_id>")
+def detalhar_grupo_conta_receber(grupo_id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            cr.id,
+            cr.descricao,
+            cr.valor,
+            cr.data_vencimento,
+            cr.status,
+            cr.plano_conta_id,
+            cr.fornecedor_id,
+            pc.nome AS plano_conta,
+            f.nome AS cliente,
+            cr.grupo_parcela_id
+        FROM contas_receber cr
+        LEFT JOIN plano_contas pc ON cr.plano_conta_id = pc.id
+        LEFT JOIN fornecedores f ON cr.fornecedor_id = f.id
+        WHERE cr.grupo_parcela_id = ?
+        ORDER BY cr.data_vencimento ASC, cr.id ASC
+    """, (grupo_id,))
+    parcelas = cursor.fetchall()
+
+    if not parcelas:
+        conn.close()
+        abort(404)
+
+    primeira_pendente = None
+    for p in parcelas:
+        if p[4] == "pendente":
+            primeira_pendente = p[3]
+            break
+
+    parcelas_pendentes = [p for p in parcelas if p[4] == "pendente"]
+    parcelas_pagas = [p for p in parcelas if p[4] == "pago"]
+
+    cursor.execute("SELECT id, nome FROM plano_contas ORDER BY nome")
+    planos = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
+    fornecedores = cursor.fetchall()
+
+    conn.close()
+    return render_template(
+        "conta_receber_grupo.html",
+        grupo_id=grupo_id,
+        parcelas=parcelas,
+        primeira_pendente=primeira_pendente,
+        parcelas_pendentes=parcelas_pendentes,
+        parcelas_pagas=parcelas_pagas,
+        descricao_grupo=parcelas[0][1],
+        plano_conta_nome=parcelas[0][7],
+        cliente_nome=parcelas[0][8],
+        planos=planos,
+        fornecedores=fornecedores
+    )
+
+# Atualizar um grupo de parcelas em lote:
+@app.route("/contas_receber/grupo/<int:grupo_id>/atualizar_valor", methods=["POST"])
+def atualizar_grupo_conta_receber(grupo_id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    data_inicial = request.form.get("data_vencimento_inicial")
+    nova_descricao = (request.form.get("nova_descricao") or "").strip()
+    novo_valor = request.form.get("novo_valor")
+    novo_plano_conta_id = request.form.get("novo_plano_conta_id")
+    novo_fornecedor_id = request.form.get("novo_fornecedor_id")
+
+    if not data_inicial:
+        conn.close()
+        abort(400, "A data inicial é obrigatória.")
+
+    try:
+        datetime.strptime(data_inicial, "%Y-%m-%d")
+    except ValueError:
+        conn.close()
+        abort(400, "Data de vencimento inválida.")
+
+    if not nova_descricao and not novo_valor and not novo_plano_conta_id and not novo_fornecedor_id:
+        conn.close()
+        abort(400, "Informe pelo menos um campo para atualizar.")
+
+    novo_valor_float = None
+    if novo_valor:
+        try:
+            novo_valor_float = float(novo_valor)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Novo valor inválido.")
+
+        if novo_valor_float <= 0:
+            conn.close()
+            abort(400, "O novo valor deve ser maior que zero.")
+
+    novo_plano_conta_id_int = None
+    if novo_plano_conta_id:
+        try:
+            novo_plano_conta_id_int = int(novo_plano_conta_id)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Plano de conta inválido.")
+
+        cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (novo_plano_conta_id_int,))
+        if not cursor.fetchone():
+            conn.close()
+            abort(400, "Plano de conta não encontrado.")
+
+    novo_fornecedor_id_int = None
+    if novo_fornecedor_id:
+        try:
+            novo_fornecedor_id_int = int(novo_fornecedor_id)
+        except (TypeError, ValueError):
+            conn.close()
+            abort(400, "Cliente inválido.")
+
+        cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (novo_fornecedor_id_int,))
+        if not cursor.fetchone():
+            conn.close()
+            abort(400, "Cliente não encontrado.")
+
+    cursor.execute("SELECT id FROM contas_receber WHERE grupo_parcela_id = ?", (grupo_id,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(404)
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM contas_receber
+        WHERE grupo_parcela_id = ?
+          AND status = 'pendente'
+          AND date(data_vencimento) >= date(?)
+    """, (grupo_id, data_inicial))
+    total_editaveis = cursor.fetchone()[0]
+
+    if total_editaveis == 0:
+        conn.close()
+        abort(400, "Não existem recebimentos pendentes para atualizar a partir desta data.")
+
+    try:
+        cursor.execute("""
+            UPDATE contas_receber
+            SET descricao = COALESCE(?, descricao),
+                valor = COALESCE(?, valor),
+                plano_conta_id = COALESCE(?, plano_conta_id),
+                fornecedor_id = COALESCE(?, fornecedor_id)
+            WHERE grupo_parcela_id = ?
+              AND status = 'pendente'
+              AND date(data_vencimento) >= date(?)
+        """, (
+            nova_descricao or None,
+            novo_valor_float,
+            novo_plano_conta_id_int,
+            novo_fornecedor_id_int,
+            grupo_id,
+            data_inicial
+        ))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        conn.close()
+        raise
+
+    conn.close()
+    return redirect(url_for("detalhar_grupo_conta_receber", grupo_id=grupo_id))
+
+# Atualizar uma parcela individual dentro de um grupo:
+@app.route("/contas_receber/grupo/<int:grupo_id>/parcela/<int:id>/atualizar", methods=["POST"])
+def atualizar_conta_receber_no_grupo(grupo_id, id):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    descricao = (request.form.get("descricao") or "").strip()
+    valor = request.form.get("valor")
+    data_vencimento = request.form.get("data_vencimento")
+    plano_conta_id = request.form.get("plano_conta_id")
+    fornecedor_id = request.form.get("fornecedor_id")
+
+    if not descricao or not valor or not data_vencimento or not plano_conta_id or not fornecedor_id:
+        conn.close()
+        abort(400, "Todos os campos são obrigatórios.")
+
+    try:
+        valor_float = float(valor)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Valor inválido.")
+
+    if valor_float <= 0:
+        conn.close()
+        abort(400, "Valor deve ser maior que zero.")
+
+    try:
+        datetime.strptime(data_vencimento, "%Y-%m-%d")
+    except ValueError:
+        conn.close()
+        abort(400, "Data de vencimento inválida.")
+
+    try:
+        plano_conta_id_int = int(plano_conta_id)
+        fornecedor_id_int = int(fornecedor_id)
+    except (TypeError, ValueError):
+        conn.close()
+        abort(400, "Plano de conta ou cliente inválido.")
+
+    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id_int,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Plano de conta não encontrado.")
+
+    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id_int,))
+    if not cursor.fetchone():
+        conn.close()
+        abort(400, "Cliente não encontrado.")
+
+    cursor.execute("""
+        SELECT id, status, grupo_parcela_id
+        FROM contas_receber
+        WHERE id = ?
+    """, (id,))
+    conta = cursor.fetchone()
+
+    if not conta:
+        conn.close()
+        abort(404)
+
+    _, status, grupo_parcela_id = conta
+
+    if grupo_parcela_id != grupo_id:
+        conn.close()
+        abort(400, "Este recebimento não pertence ao grupo informado.")
+
+    if status != "pendente":
+        conn.close()
+        abort(400, "Só é possível editar recebimentos pendentes.")
+
+    try:
+        cursor.execute("""
+            UPDATE contas_receber
+            SET descricao = ?,
+                valor = ?,
+                data_vencimento = ?,
+                plano_conta_id = ?,
+                fornecedor_id = ?
+            WHERE id = ?
+              AND grupo_parcela_id = ?
+              AND status = 'pendente'
+        """, (descricao, valor_float, data_vencimento, plano_conta_id_int, fornecedor_id_int, id, grupo_id))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(e)
+        conn.close()
+        raise
+
+    conn.close()
+    return redirect(url_for("detalhar_grupo_conta_receber", grupo_id=grupo_id))
+
 @app.route("/contas_receber/receber/<int:id>", methods=["POST"])
 def registrar_receita(id):
 
