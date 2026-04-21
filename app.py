@@ -1086,6 +1086,7 @@ def contas_pagar():
 
     return render_template("contas_pagar.html", contas=contas, categorias=categorias, planos=planos, fornecedores=fornecedores, today=today, contas_banco=contas_banco)
 
+# Atualização Individual
 @app.route("/contas_pagar/atualizar/<int:id>", methods=["POST"])
 def atualizar_conta_pagar(id):
     conn = get_db()
@@ -1167,6 +1168,38 @@ def atualizar_conta_pagar(id):
 
     conn.close()
     return redirect(url_for("contas_pagar"))
+
+# Atualização em lote: Listar grupos de parcelas
+@app.route("/contas_pagar/grupos")
+def listar_grupos_contas_pagar():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            cp.grupo_parcela_id,
+            cp.descricao,
+            pc.nome AS plano_conta,
+            f.nome AS fornecedor,
+            COUNT(*) AS total_parcelas,
+            SUM(CASE WHEN cp.status = 'pago' THEN 1 ELSE 0 END) AS parcelas_pagas,
+            SUM(CASE WHEN cp.status = 'pendente' THEN 1 ELSE 0 END) AS parcelas_pendentes,
+            MIN(cp.data_vencimento) AS primeiro_vencimento,
+            MAX(cp.data_vencimento) AS ultimo_vencimento,
+            SUM(CASE WHEN cp.status = 'pendente' THEN cp.valor ELSE 0 END) AS total_em_aberto
+        FROM contas_pagar cp
+        LEFT JOIN plano_contas pc ON cp.plano_conta_id = pc.id
+        LEFT JOIN fornecedores f ON cp.fornecedor_id = f.id
+        WHERE cp.grupo_parcela_id IS NOT NULL
+        GROUP BY cp.grupo_parcela_id, cp.descricao, pc.nome, f.nome
+        HAVING COUNT(*) > 1
+        ORDER BY primeiro_vencimento ASC
+    """)
+
+    grupos = cursor.fetchall()
+    conn.close()
+
+    return render_template("contas_pagar_grupos.html", grupos=grupos)
 
 @app.route("/contas_pagar/pagar/<int:id>", methods=["POST"])
 def registrar_conta(id):
