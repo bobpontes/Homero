@@ -1178,9 +1178,22 @@ def listar_grupos_contas_pagar():
     cursor.execute("""
         SELECT
             cp.grupo_parcela_id,
-            cp.descricao,
-            pc.nome AS plano_conta,
-            f.nome AS fornecedor,
+
+            CASE
+                WHEN COUNT(DISTINCT cp.descricao) > 1 THEN MIN(cp.descricao) || ' (e outras)'
+                ELSE MIN(cp.descricao)
+            END AS descricao,
+
+            CASE
+                WHEN COUNT(DISTINCT pc.nome) > 1 THEN MIN(pc.nome) || ' (e outros)'
+                ELSE MIN(pc.nome)
+            END AS plano_conta,
+
+            CASE
+                WHEN COUNT(DISTINCT f.nome) > 1 THEN MIN(f.nome) || ' (e outros)'
+                ELSE MIN(f.nome)
+            END AS fornecedor,
+
             COUNT(*) AS total_parcelas,
             SUM(CASE WHEN cp.status = 'pago' THEN 1 ELSE 0 END) AS parcelas_pagas,
             SUM(CASE WHEN cp.status = 'pendente' THEN 1 ELSE 0 END) AS parcelas_pendentes,
@@ -1191,10 +1204,11 @@ def listar_grupos_contas_pagar():
         LEFT JOIN plano_contas pc ON cp.plano_conta_id = pc.id
         LEFT JOIN fornecedores f ON cp.fornecedor_id = f.id
         WHERE cp.grupo_parcela_id IS NOT NULL
-        GROUP BY cp.grupo_parcela_id, cp.descricao, pc.nome, f.nome
+        GROUP BY cp.grupo_parcela_id
         HAVING COUNT(*) > 1
         ORDER BY primeiro_vencimento ASC
     """)
+
 
     grupos = cursor.fetchall()
     conn.close()
@@ -2117,9 +2131,22 @@ def listar_grupos_contas_receber():
     cursor.execute("""
         SELECT
             cr.grupo_parcela_id,
-            cr.descricao,
-            pc.nome AS plano_conta,
-            f.nome AS cliente,
+
+            CASE
+                WHEN COUNT(DISTINCT cr.descricao) > 1 THEN MIN(cr.descricao) || ' (e outras)'
+                ELSE MIN(cr.descricao)
+            END AS descricao,
+
+            CASE
+                WHEN COUNT(DISTINCT pc.nome) > 1 THEN MIN(pc.nome) || ' (e outros)'
+                ELSE MIN(pc.nome)
+            END AS plano_conta,
+
+            CASE
+                WHEN COUNT(DISTINCT f.nome) > 1 THEN MIN(f.nome) || ' (e outros)'
+                ELSE MIN(f.nome)
+            END AS cliente,
+
             COUNT(*) AS total_parcelas,
             SUM(CASE WHEN cr.status = 'pago' THEN 1 ELSE 0 END) AS parcelas_pagas,
             SUM(CASE WHEN cr.status = 'pendente' THEN 1 ELSE 0 END) AS parcelas_pendentes,
@@ -2130,10 +2157,11 @@ def listar_grupos_contas_receber():
         LEFT JOIN plano_contas pc ON cr.plano_conta_id = pc.id
         LEFT JOIN fornecedores f ON cr.fornecedor_id = f.id
         WHERE cr.grupo_parcela_id IS NOT NULL
-        GROUP BY cr.grupo_parcela_id, cr.descricao, pc.nome, f.nome
+        GROUP BY cr.grupo_parcela_id
         HAVING COUNT(*) > 1
         ORDER BY primeiro_vencimento ASC
     """)
+
 
     grupos = cursor.fetchall()
     conn.close()
