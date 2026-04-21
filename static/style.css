@@ -26,6 +26,15 @@ h2 {
     color: #34495e;
 }
 
+.erro {
+    color: #c0392b;
+    background: #fdecea;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
 .card {
     background: rgba(255, 255, 255, 0.55);
     backdrop-filter: blur(16px);
@@ -306,6 +315,21 @@ button:hover, .btn-edit:hover, .btn-delete:hover, .btn-pagar:hover {
 .sidebar a:hover {
     background: rgba(255, 255, 255, 0.08);
     transform: translateX(3px);
+}
+
+.logout-btn {
+    display: block;
+    margin-top: 20px;
+    color: white;
+    text-decoration: none;
+    padding: 10px;
+    border-radius: 5px;
+    background-color: #c0392b;
+    text-align: center;
+}
+
+.logout-btn:hover {
+    background-color: #a93226;
 }
 
 .content {

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homero - Login</title>
+</head>   
+<body>
+    <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+    </aside>
+
+    <main class="content">
+        <div class="container">
+            <div class="card">
+                <h1>Login</h1>
+                
+                <form method="POST">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>E-mail</label>
+                            <input type="email" name="email" placeholder="Email" required autocomplete="username">
+                        </div>
+                        <div class="form-field">
+                            <label>Senha</label>
+                            <input type="password" name="senha" placeholder="Senha" required autocomplete="current-password">
+                        </div>
+                        <div class="modal-actions">
+                            <button type="submit">Entrar</button>
+                        </div>
+                    </div>
+                </form>
+                </div>
+                    
+            </div>
+        </div>
+    </main>
+</body> 
+</html>

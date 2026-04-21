@@ -1,15 +1,26 @@
 import sqlite3
-from flask import Flask, request, render_template, redirect, url_for, abort, Response
+from flask import Flask, request, render_template, redirect, url_for, abort, Response, session
 from datetime import datetime, timedelta, date
+from werkzeug.security import check_password_hash
+from functools import wraps
 import calendar
 import shutil
 import os
 import csv
 
 app = Flask(__name__)
+app.secret_key = "chave_super_secreta_temporaria"
 
 # Data de hoje
 today = date.today().strftime("%Y-%m-%d")
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "usuario_id" not in session:
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
 def adicionar_meses(data_base, meses):
@@ -60,6 +71,7 @@ def pagina_nao_encontrada(e):
     return render_template("404.html"), 404
 
 @app.route("/", methods=["GET", "POST"])
+@login_required
 def home():
 
     sucesso = request.args.get("sucesso")
@@ -97,6 +109,7 @@ def home():
     return render_template("index.html", alunos=alunos, total=total, sucesso=sucesso, busca=busca)
 
 @app.route("/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_aluno(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -119,6 +132,7 @@ def remover_aluno(id):
     return redirect(url_for("home"))
 
 @app.route("/editar/<int:id>", methods=["GET", "POST"])
+@login_required
 def editar_aluno(id):
 
     conn = get_db()
@@ -152,6 +166,7 @@ def editar_aluno(id):
     return render_template("editar.html", aluno=aluno)
 
 @app.route("/exportar/alunos")
+@login_required
 def exportar_alunos():
     conn = get_db()
     cursor = conn.cursor()
@@ -174,6 +189,7 @@ def exportar_alunos():
     )
 
 @app.route("/financeiro")
+@login_required
 def financeiro():
     
     # Filtro para dados
@@ -324,6 +340,7 @@ def financeiro():
     )
 
 @app.route("/mensalidade/nova", methods=["POST"])
+@login_required
 def nova_mensalidade():
 
     conn = get_db()
@@ -383,6 +400,7 @@ def nova_mensalidade():
 # Rotas para atualização de valores: (1 - Mens individual, 2 - tela de grupos de parcelas, 3 - tela de um grupo de parcelas, 4 - edição de parcelas de um grupo em lote)
 # 1
 @app.route("/mensalidade/atualizar_valor/<int:id>", methods=["POST"])
+@login_required
 def atualizar_valor_mensalidade(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -448,6 +466,7 @@ def atualizar_valor_mensalidade(id):
 
 # 2
 @app.route("/mensalidade/grupos")
+@login_required
 def listar_grupos_mensalidades():
     
     conn = get_db()
@@ -478,6 +497,7 @@ def listar_grupos_mensalidades():
 
 # 3
 @app.route("/mensalidade/grupo/<int:grupo_id>")
+@login_required
 def detalhar_grupo_mensalidade(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -536,6 +556,7 @@ def detalhar_grupo_mensalidade(grupo_id):
 
 # 3
 @app.route("/mensalidade/grupo/<int:grupo_id>/atualizar_valor", methods=["POST"])
+@login_required
 def atualizar_grupo_mensalidade(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -629,6 +650,7 @@ def atualizar_grupo_mensalidade(grupo_id):
 
 # Edição individual de parcelas no grupo
 @app.route("/mensalidade/grupo/<int:grupo_id>/parcela/<int:id>/atualizar_valor", methods=["POST"])
+@login_required
 def atualizar_valor_mensalidade_no_grupo(grupo_id, id):
 
     conn = get_db()
@@ -695,6 +717,7 @@ def atualizar_valor_mensalidade_no_grupo(grupo_id, id):
     return (redirect(url_for("detalhar_grupo_mensalidade", grupo_id=grupo_id)))
 
 @app.route("/pagar/<int:id>", methods=["POST"])
+@login_required
 def registrar_pagamento(id):
 
     data_pagamento = request.form.get("data_pagamento")
@@ -806,6 +829,7 @@ def registrar_pagamento(id):
     return redirect(url_for("financeiro"))
 
 @app.route("/mensalidade/estornar/<int:id>", methods=["POST"])
+@login_required
 def estornar_mensalidade(id):
 
     # 0) Data da movimentação:
@@ -892,6 +916,7 @@ def estornar_mensalidade(id):
     return redirect(url_for("financeiro"))
 
 @app.route("/mensalidade/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_mensalidade(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -920,6 +945,7 @@ def remover_mensalidade(id):
     return redirect(url_for("financeiro"))
 
 @app.route("/mensalidade/remover_grupo/<int:grupo_id>", methods = ['POST'])
+@login_required
 def remover_grupo_mensalidade(grupo_id):
 
     conn = get_db()
@@ -949,6 +975,7 @@ def remover_grupo_mensalidade(grupo_id):
     return redirect(url_for("financeiro"))
 
 @app.route("/conta/nova", methods=["POST"])
+@login_required
 def nova_conta():
     
     descricao = request.form.get("descricao")
@@ -1015,6 +1042,7 @@ def nova_conta():
     return redirect(url_for("contas_pagar"))
 
 @app.route("/contas_pagar")
+@login_required
 def contas_pagar():
 
     conn = get_db()
@@ -1088,6 +1116,7 @@ def contas_pagar():
 
 # Atualização Individual
 @app.route("/contas_pagar/atualizar/<int:id>", methods=["POST"])
+@login_required
 def atualizar_conta_pagar(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -1171,6 +1200,7 @@ def atualizar_conta_pagar(id):
 
 # Atualização em lote: Listar grupos de parcelas
 @app.route("/contas_pagar/grupos")
+@login_required
 def listar_grupos_contas_pagar():
     conn = get_db()
     cursor = conn.cursor()
@@ -1217,6 +1247,7 @@ def listar_grupos_contas_pagar():
 
 # Atualização em lote: Detalhar um grupo de parcelas
 @app.route("/contas_pagar/grupo/<int:grupo_id>")
+@login_required
 def detalhar_grupo_conta_pagar(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -1277,6 +1308,7 @@ def detalhar_grupo_conta_pagar(grupo_id):
 
 # Atualização em lote: atualizar várias parcelas de um grupo
 @app.route("/contas_pagar/grupo/<int:grupo_id>/atualizar_valor", methods=["POST"])
+@login_required
 def atualizar_grupo_conta_pagar(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -1388,6 +1420,7 @@ def atualizar_grupo_conta_pagar(grupo_id):
 
 # Atualizar uma parcela do grupo:
 @app.route("/contas_pagar/grupo/<int:grupo_id>/parcela/<int:id>/atualizar", methods=["POST"])
+@login_required
 def atualizar_conta_pagar_no_grupo(grupo_id, id):
     conn = get_db()
     cursor = conn.cursor()
@@ -1492,6 +1525,7 @@ def atualizar_conta_pagar_no_grupo(grupo_id, id):
     return redirect(url_for("detalhar_grupo_conta_pagar", grupo_id=grupo_id))
 
 @app.route("/contas_pagar/pagar/<int:id>", methods=["POST"])
+@login_required
 def registrar_conta(id):
 
     data_pagamento = request.form.get("data_pagamento")
@@ -1603,6 +1637,7 @@ def registrar_conta(id):
     return redirect(url_for("contas_pagar"))
 
 @app.route("/contas_pagar/estornar/<int:id>", methods=["POST"])
+@login_required
 def estornar_contas_pagar(id):
 
     # 0) Data da movimentação:
@@ -1674,6 +1709,7 @@ def estornar_contas_pagar(id):
     return redirect(url_for("contas_pagar"))
 
 @app.route("/contas_pagar/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_conta(id):
 
     conn = get_db()
@@ -1701,6 +1737,7 @@ def remover_conta(id):
     return redirect(url_for("contas_pagar"))
 
 @app.route("/contas_pagar/remover_grupo/<int:grupo_id>", methods=["POST"])
+@login_required
 def remover_grupo_conta(grupo_id):
 
     conn = get_db()
@@ -1730,6 +1767,7 @@ def remover_grupo_conta(grupo_id):
     return redirect(url_for("contas_pagar"))
 
 @app.route("/contas_receber")
+@login_required
 def contas_receber():
 
     # Filtro para dados
@@ -1941,6 +1979,7 @@ def contas_receber():
     )
 
 @app.route("/contas_receber/nova", methods=["POST"])
+@login_required
 def nova_receita():
     
     descricao = request.form.get("descricao")
@@ -2022,6 +2061,7 @@ def nova_receita():
     return redirect(url_for("contas_receber"))
 
 @app.route("/contas_receber/atualizar/<int:id>", methods=["POST"])
+@login_required
 def atualizar_conta_receber(id):
     conn = get_db()
     cursor = conn.cursor()
@@ -2124,6 +2164,7 @@ def atualizar_conta_receber(id):
 
 # Listar grupos de parcelas a receber:
 @app.route("/contas_receber/grupos")
+@login_required
 def listar_grupos_contas_receber():
     conn = get_db()
     cursor = conn.cursor()
@@ -2170,6 +2211,7 @@ def listar_grupos_contas_receber():
 
 # Detalhar um grupo de parcelas:
 @app.route("/contas_receber/grupo/<int:grupo_id>")
+@login_required
 def detalhar_grupo_conta_receber(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -2230,6 +2272,7 @@ def detalhar_grupo_conta_receber(grupo_id):
 
 # Atualizar um grupo de parcelas em lote:
 @app.route("/contas_receber/grupo/<int:grupo_id>/atualizar_valor", methods=["POST"])
+@login_required
 def atualizar_grupo_conta_receber(grupo_id):
     conn = get_db()
     cursor = conn.cursor()
@@ -2341,6 +2384,7 @@ def atualizar_grupo_conta_receber(grupo_id):
 
 # Atualizar uma parcela individual dentro de um grupo:
 @app.route("/contas_receber/grupo/<int:grupo_id>/parcela/<int:id>/atualizar", methods=["POST"])
+@login_required
 def atualizar_conta_receber_no_grupo(grupo_id, id):
     conn = get_db()
     cursor = conn.cursor()
@@ -2433,6 +2477,7 @@ def atualizar_conta_receber_no_grupo(grupo_id, id):
     return redirect(url_for("detalhar_grupo_conta_receber", grupo_id=grupo_id))
 
 @app.route("/contas_receber/receber/<int:id>", methods=["POST"])
+@login_required
 def registrar_receita(id):
 
     data_pagamento = request.form.get("data_pagamento")
@@ -2529,6 +2574,7 @@ def registrar_receita(id):
     return redirect(url_for("contas_receber"))
 
 @app.route("/contas_receber/estornar/<int:id>", methods=["POST"])
+@login_required
 def estornar_contas_receber(id):
 
     # 0) Data da movimentação:
@@ -2600,6 +2646,7 @@ def estornar_contas_receber(id):
     return redirect(url_for("contas_receber"))
 
 @app.route("/contas_receber/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_receita(id):
 
     conn = get_db()
@@ -2627,6 +2674,7 @@ def remover_receita(id):
     return redirect(url_for("contas_receber"))
 
 @app.route("/contas_receber/remover_grupo/<int:grupo_id>", methods=["POST"])
+@login_required
 def remover_grupo_receita(grupo_id):
 
     conn = get_db()
@@ -2656,6 +2704,7 @@ def remover_grupo_receita(grupo_id):
     return redirect(url_for("contas_receber"))
 
 @app.route("/contas_bancarias")
+@login_required
 def contas_bancarias():
 
     conn = get_db()
@@ -2673,6 +2722,7 @@ def contas_bancarias():
     return render_template("contas_bancarias.html", contas_banco=contas_banco, saldo_total_contas=saldo_total_contas)
 
 @app.route("/contas_bancarias/nova", methods=["POST"])
+@login_required
 def nova_conta_bancaria():
 
     nome = request.form.get("nome")
@@ -2709,6 +2759,7 @@ def nova_conta_bancaria():
     return redirect(url_for("contas_bancarias"))
 
 @app.route("/extrato")
+@login_required
 def movimentacoes_bancarias():
 
     conn = get_db()
@@ -2738,6 +2789,7 @@ def movimentacoes_bancarias():
     return render_template("extrato.html", movimentacoes_bancarias=movimentacoes_bancarias, saldo_total_contas=saldo_total_contas)
     
 @app.route("/fornecedores")
+@login_required
 def fornecedores():
 
     conn = get_db()
@@ -2761,6 +2813,7 @@ def fornecedores():
     )
 
 @app.route("/fornecedores/novo", methods=["POST"])
+@login_required
 def novo_fornecedor():
 
     nome = request.form.get("nome")
@@ -2826,6 +2879,7 @@ def novo_fornecedor():
     return redirect(url_for("fornecedores"))
 
 @app.route("/fornecedores/editar/<int:id>", methods=["GET", "POST"])
+@login_required
 def editar_fornecedor(id):
 
     conn = get_db()
@@ -2899,6 +2953,7 @@ def editar_fornecedor(id):
     return render_template("fornecedor_editar.html", fornecedor=fornecedor)
 
 @app.route("/fornecedores/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_fornecedor(id):
 
     conn = get_db()
@@ -2937,6 +2992,7 @@ def remover_fornecedor(id):
     return redirect(url_for("fornecedores"))
 
 @app.route("/plano_contas")
+@login_required
 def plano_contas():
 
     categoria_editar_id = request.args.get("categoria_editar")
@@ -3003,6 +3059,7 @@ def plano_contas():
     )
 
 @app.route("/plano_contas/categoria/nova", methods=["POST"])
+@login_required
 def nova_categoria_plano_conta():
 
     codigo = (request.form.get("codigo") or "").strip()
@@ -3045,6 +3102,7 @@ def nova_categoria_plano_conta():
 
 # Novo endpoint para criar plano de contas
 @app.route("/plano_contas/novo", methods=["POST"])
+@login_required
 def novo_plano_conta():
 
     codigo = (request.form.get("codigo") or "").strip()
@@ -3093,6 +3151,7 @@ def novo_plano_conta():
 
 # EDITAR CATEGORIA
 @app.route("/plano_contas/categoria/editar/<int:id>", methods=["GET", "POST"])
+@login_required
 def editar_categoria_plano_conta(id):
 
     if request.method == "GET":
@@ -3157,6 +3216,7 @@ def editar_categoria_plano_conta(id):
 
 # REMOVER CATEGORIA
 @app.route("/plano_contas/categoria/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_categoria_plano_conta(id):
 
     conn = get_db()
@@ -3187,6 +3247,7 @@ def remover_categoria_plano_conta(id):
 
 # EDITAR PLANO
 @app.route("/plano_contas/plano/editar/<int:id>", methods=["GET","POST"])
+@login_required
 def editar_plano_conta(id):
 
     if request.method == "GET":
@@ -3260,6 +3321,7 @@ def editar_plano_conta(id):
 
 # REMOVER PLANO
 @app.route("/plano_contas/plano/remover/<int:id>", methods=["POST"])
+@login_required
 def remover_plano_conta(id):
 
     conn = get_db()
@@ -3293,6 +3355,38 @@ def remover_plano_conta(id):
 
     return redirect(url_for("plano_contas"))
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email").lower().strip()
+        senha = request.form.get("senha")
+
+        if not email or not senha:
+            return "Email e senha são obrigatórios", 400
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = ? AND ativo = 1", (email, ))
+        usuario = cursor.fetchone()
+
+        conn.close()
+
+        if usuario:
+            senha_hash = usuario[1]
+            if check_password_hash(senha_hash, senha):
+                session["usuario_id"] = usuario[0]
+                return redirect(url_for("home"))
+        else:
+            return "Email ou senha inválidos", 400
+    
+    return render_template("login.html", erro="Email ou senha inválidos")
+
+@app.route("/logout")
+@login_required
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 def criar_banco():
