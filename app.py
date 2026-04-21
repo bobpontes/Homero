@@ -3382,6 +3382,24 @@ def login():
     
     return render_template("login.html", erro="Email ou senha inválidos")
 
+@app.context_processor
+def inject_usuario():
+    usuario_nome = None
+
+    if "usuario_id" in session:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT nome FROM usuarios WHERE id = ?", (session["usuario_id"],))
+        usuario = cursor.fetchone()
+
+        conn.close()
+
+        if usuario:
+            usuario_nome = usuario[0]
+
+    return dict(usuario_nome=usuario_nome)
+
 @app.route("/logout")
 @login_required
 def logout():
