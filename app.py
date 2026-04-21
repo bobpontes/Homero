@@ -2108,6 +2108,38 @@ def atualizar_conta_receber(id):
     conn.close()
     return redirect(url_for("contas_receber"))
 
+# Listar grupos de parcelas a receber:
+@app.route("/contas_receber/grupos")
+def listar_grupos_contas_receber():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            cr.grupo_parcela_id,
+            cr.descricao,
+            pc.nome AS plano_conta,
+            f.nome AS cliente,
+            COUNT(*) AS total_parcelas,
+            SUM(CASE WHEN cr.status = 'pago' THEN 1 ELSE 0 END) AS parcelas_pagas,
+            SUM(CASE WHEN cr.status = 'pendente' THEN 1 ELSE 0 END) AS parcelas_pendentes,
+            MIN(cr.data_vencimento) AS primeiro_vencimento,
+            MAX(cr.data_vencimento) AS ultimo_vencimento,
+            SUM(CASE WHEN cr.status = 'pendente' THEN cr.valor ELSE 0 END) AS total_em_aberto
+        FROM contas_receber cr
+        LEFT JOIN plano_contas pc ON cr.plano_conta_id = pc.id
+        LEFT JOIN fornecedores f ON cr.fornecedor_id = f.id
+        WHERE cr.grupo_parcela_id IS NOT NULL
+        GROUP BY cr.grupo_parcela_id, cr.descricao, pc.nome, f.nome
+        HAVING COUNT(*) > 1
+        ORDER BY primeiro_vencimento ASC
+    """)
+
+    grupos = cursor.fetchall()
+    conn.close()
+
+    return render_template("contas_receber_grupos.html", grupos=grupos)
+
 @app.route("/contas_receber/receber/<int:id>", methods=["POST"])
 def registrar_receita(id):
 

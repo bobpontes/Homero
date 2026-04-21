@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Homero — Grupos de Contas a Receber</title>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h2 class="logo">Homero</h2>
+
+            <nav>
+                <a href="/">📚 Alunos</a>
+                <a href="/financeiro">💰 Financeiro</a>
+                <a href="/contas_pagar">💸 Contas a Pagar</a>
+                <a href="/contas_receber" class="active">💵 Contas a Receber</a>
+                <a href="/fornecedores">🏢 Fornecedores</a>
+                <a href="/plano_contas">📓 Plano de Contas</a>
+                <a href="/contas_bancarias">🏦 Contas Bancárias</a>
+                <a href="/extrato">🧾 Extrato</a>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <div class="header">
+                <h1>🧩 Grupos de Contas a Receber</h1>
+            </div>
+
+            <div class="container">
+                <section class="list-section">
+                    <div class="card">
+                        <h2>Grupos de recebimentos parcelados</h2>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Grupo</th>
+                                    <th>Descrição</th>
+                                    <th>Plano de Contas</th>
+                                    <th>Cliente</th>
+                                    <th>Parcelas</th>
+                                    <th>Pagas</th>
+                                    <th>Pendentes</th>
+                                    <th>Período</th>
+                                    <th>Em aberto</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for g in grupos %}
+                                <tr class="{% if g[6] > 0 %}linha-pendente{% else %}linha-paga{% endif %}">
+                                    <td>#{{ g[0] }}</td>
+                                    <td>{{ g[1] }}</td>
+                                    <td>{{ g[2] or "—" }}</td>
+                                    <td>{{ g[3] or "—" }}</td>
+                                    <td>{{ g[4] }}</td>
+                                    <td>{{ g[5] }}</td>
+                                    <td>{{ g[6] }}</td>
+                                    <td>{{ g[7]|replace("-", "/") }} até {{ g[8]|replace("-", "/") }}</td>
+                                    <td>R$ {{ "%.2f"|format(g[9] or 0) }}</td>
+                                    <td>
+                                        <span style="opacity: 0.6;">Detalhe em breve</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+
+                        <div class="modal-actions">
+                            <a href="{{ url_for('contas_receber') }}" class="btn-secondary">Voltar</a>
+                        </div>
+                    </div>
+                </section>
+            
+            </div>
+        </main>
+    </div>
+</body>
+</html>
