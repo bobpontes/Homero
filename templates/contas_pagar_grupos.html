@@ -59,7 +59,9 @@
                                     <td>{{ g[7]|replace("-", "/") }} até {{ g[8]|replace("-", "/") }}</td>
                                     <td>R$ {{ "%.2f"|format(g[9] or 0) }}</td>
                                     <td>
-                                        <span style="opacity: 0.6;">Detalhe em breve</span>
+                                        <a href="{{ url_for('detalhar_grupo_conta_pagar', grupo_id=g[0]) }}" class="btn-edit">
+                                            Abrir Grupo
+                                        </a>
                                     </td>
                                 </tr>
                                 {% endfor %}
