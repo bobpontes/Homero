@@ -9,7 +9,7 @@ import os
 import csv
 
 app = Flask(__name__)
-app.secret_key = "chave_super_secreta_temporaria"
+app.secret_key = os.environ.get("SECRET_KEY", "dev_key")
 
 # Data de hoje
 today = date.today().strftime("%Y-%m-%d")
