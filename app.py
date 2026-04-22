@@ -3544,13 +3544,19 @@ def criar_banco():
 
 def backup_banco():
     hoje = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    
-    os.makedirs("backup", exist_ok=True)
-    
+
     origem = "escola.db"
     destino = f"backup/escola_{hoje}.db"
 
-    shutil.copy(origem, destino)
+    if not os.path.exists(origem):
+        print("❌ Banco não encontrado, backup não realizado.")
+        return
+
+    os.makedirs("backup", exist_ok=True)
+
+    shutil.copy2(origem, destino)
+
+    print(f"✅ Backup criado em: {destino}")
 
 def listar_alunos_db():
     conn = get_db()
