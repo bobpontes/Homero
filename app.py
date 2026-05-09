@@ -1,4 +1,5 @@
 import sqlite3
+import psycopg2
 from flask import Flask, request, render_template, redirect, url_for, abort, Response, session
 from datetime import datetime, timedelta, date
 from werkzeug.security import check_password_hash
@@ -42,6 +43,28 @@ def get_db():
     conn = sqlite3.connect("escola.db")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+def get_db_postgres():
+    conn = psycopg2.connect(
+        dbname="homero_db",
+        user="brunopontes",
+        host="localhost"
+    )
+    return conn
+
+@app.route("/teste_db")
+def teste_db():
+
+    conn = get_db_postgres()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT 1")
+
+    resultado = cursor.fetchone()
+
+    conn.close()
+
+    return str(resultado)
 
 # helper para aplicação de filtro no sql:
 def aplicar_condicao(filtro_sql, condicao):
@@ -3405,7 +3428,6 @@ def inject_usuario():
 def logout():
     session.clear()
     return redirect(url_for("login"))
-
 
 def criar_banco():
     conn = get_db()
