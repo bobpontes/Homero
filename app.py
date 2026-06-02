@@ -832,7 +832,7 @@ def registrar_pagamento(id):
     return redirect(url_for("financeiro"))
 
 @app.route("/mensalidade/estornar/<int:id>", methods=["POST"])
-# @login_required
+@login_required
 def estornar_mensalidade(id):
 
     # 0) Data da movimentação:
