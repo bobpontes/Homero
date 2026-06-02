@@ -2731,7 +2731,7 @@ def nova_conta_bancaria():
     nome = request.form.get("nome")
     tipo = request.form.get("tipo") or "outro"
     saldo = request.form.get("saldo")
-    ativo = 1 if request.form.get("ativo") else 0
+    ativo = True if request.form.get("ativo") else False
 
     if not nome:
         abort(400, "Nome da conta é obrigatório.")
@@ -3370,7 +3370,7 @@ def login():
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = %s AND ativo = 1", (email, ))
+        cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = %s AND ativo = TRUE", (email, ))
         usuario = cursor.fetchone()
 
         conn.close()
@@ -3582,7 +3582,7 @@ def inserir_aluno(nome, idade, turma):
     conn.commit()
     conn.close()
 
-criar_banco()
+# criar_banco()
 
 # cria um backup automático do banco sempre que o sistema iniciar
 # backup_banco()
