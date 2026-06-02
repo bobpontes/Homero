@@ -832,7 +832,7 @@ def registrar_pagamento(id):
     return redirect(url_for("financeiro"))
 
 @app.route("/mensalidade/estornar/<int:id>", methods=["POST"])
-@login_required
+# @login_required
 def estornar_mensalidade(id):
 
     # 0) Data da movimentação:
@@ -842,14 +842,33 @@ def estornar_mensalidade(id):
     cursor = conn.cursor()
 
     # 1) Verifica se existe
-    cursor.execute("SELECT status, valor, conta_bancaria_id FROM mensalidades WHERE id = %s", (id, ))
+    cursor.execute("SELECT status, conta_bancaria_id FROM mensalidades WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    status, valor, conta_bancaria_id = resultado
+    status, conta_bancaria_id = resultado
+
+    # 1.1) Verificar o valor:
+    cursor.execute("""
+        SELECT valor
+        FROM movimentacoes_bancarias
+        WHERE origem = 'mensalidade'
+        AND origem_id = %s
+        AND tipo = 'entrada'
+        ORDER BY id DESC
+        LIMIT 1
+    """, (id, ))
+
+    resultado_mov = cursor.fetchone()
+
+    if not resultado_mov:
+        conn.close()
+        abort(400, "Movimentação bancária original não encontrada.")
+
+    valor = resultado_mov[0]
 
     # 2) Segurança: Verifica se está pago
     if status != 'pago':
@@ -1650,14 +1669,33 @@ def estornar_contas_pagar(id):
     cursor = conn.cursor()
 
     # 1) Verifica se existe
-    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_pagar WHERE id = %s", (id, ))
+    cursor.execute("SELECT descricao, status, conta_bancaria_id FROM contas_pagar WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    descricao, status, valor, conta_bancaria_id = resultado
+    descricao, status, conta_bancaria_id = resultado
+
+    # 1.1) Verificar o valor:
+    cursor.execute("""
+        SELECT valor
+        FROM movimentacoes_bancarias
+        WHERE origem = 'contas_pagar'
+        AND origem_id = %s
+        AND tipo = 'saida'
+        ORDER BY id DESC
+        LIMIT 1
+    """, (id, ))
+
+    resultado_mov = cursor.fetchone()
+
+    if not resultado_mov:
+        conn.close()
+        abort(400, "Movimentação bancária original não encontrada.")
+
+    valor = resultado_mov[0]
 
     # 2) Segurança: Verifica se está pago
     if status != 'pago':
@@ -2587,14 +2625,33 @@ def estornar_contas_receber(id):
     cursor = conn.cursor()
 
     # 1) Verifica se existe
-    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_receber WHERE id = %s", (id, ))
+    cursor.execute("SELECT descricao, status, conta_bancaria_id FROM contas_receber WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    descricao, status, valor, conta_bancaria_id = resultado
+    descricao, status, conta_bancaria_id = resultado
+
+    # 1.1) Verificar valor:
+    cursor.execute("""
+        SELECT valor
+        FROM movimentacoes_bancarias
+        WHERE origem = 'contas_receber'
+        AND origem_id = %s
+        AND tipo = 'entrada'
+        ORDER BY id DESC
+        LIMIT 1
+    """, (id, ))
+
+    resultado_mov = cursor.fetchone()
+
+    if not resultado_mov:
+        conn.close()
+        abort(400, "Movimentação bancária original não encontrada.")
+
+    valor = resultado_mov[0]
 
     # 2) Segurança: Verifica se está pago
     if status != 'pago':
