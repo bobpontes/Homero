@@ -7,6 +7,7 @@ import calendar
 import shutil
 import os
 import csv
+from decimal import Decimal
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev_key")
@@ -297,7 +298,7 @@ def financeiro():
     WHERE status = 'pendente'
     """)
     resultado = cursor.fetchone()
-    total_aberto = resultado[0] if resultado[0] else 0.0  # Se for None, retorna 0.0
+    total_aberto = resultado[0] if resultado[0] else Decimal('0')  # Se for None, retorna 0.0
 
     # Calculo de Receita Prevista para Dashboard Financeiro
     cursor.execute("""
@@ -306,7 +307,7 @@ def financeiro():
     """, (mes, ))
 
     resultado = cursor.fetchone()
-    receita_prevista = resultado[0] if resultado[0] else 0
+    receita_prevista = resultado[0] if resultado[0] else Decimal('0')
 
     # Calculo de Despesa Prevista para Dashboard Financeiro
     cursor.execute("""
@@ -315,7 +316,7 @@ def financeiro():
     """, (mes, ))
 
     resultado = cursor.fetchone()
-    despesa_prevista = resultado[0] if resultado[0] else 0
+    despesa_prevista = resultado[0] if resultado[0] else Decimal('0')
 
     # Saldo Projetado
     saldo_projetado = receita_prevista - despesa_prevista
@@ -1917,7 +1918,7 @@ def contas_receber():
     {filtro_receber}
     """, parametros)
     resultado_c_receber = cursor.fetchone()
-    total_contas_receber = resultado_c_receber[0] if resultado_c_receber and resultado_c_receber[0] else 0.0
+    total_contas_receber = resultado_c_receber[0] if resultado_c_receber and resultado_c_receber[0] else Decimal('0')
     total_receitas = total_contas_receber
 
     cursor.execute(f"""
@@ -1926,7 +1927,7 @@ def contas_receber():
     {filtro_mensalidades}
     """, parametros)
     resultado_mensalidades = cursor.fetchone()
-    total_contas_mensalidades = resultado_mensalidades[0] if resultado_mensalidades and resultado_mensalidades[0] else 0.0
+    total_contas_mensalidades = resultado_mensalidades[0] if resultado_mensalidades and resultado_mensalidades[0] else Decimal('0')
     total_mensalidades = total_contas_mensalidades
 
     receita_total = total_receitas + total_mensalidades
@@ -1938,7 +1939,7 @@ def contas_receber():
     {filtro_pagar}
     """, parametros)
     resultado_c_pagar = cursor.fetchone()
-    total_despesas = resultado_c_pagar[0] if resultado_c_pagar and resultado_c_pagar[0] else 0.0
+    total_despesas = resultado_c_pagar[0] if resultado_c_pagar and resultado_c_pagar[0] else Decimal('0')
 
     despesa_total = total_despesas
 
@@ -1983,7 +1984,7 @@ def contas_receber():
     {filtro_receber_status}
     """, parametros)
     resultado_receitas_pendente = cursor.fetchone()
-    total_receitas_pendentes = resultado_receitas_pendente[0] if resultado_receitas_pendente and resultado_receitas_pendente[0] else 0.0 # Se for None, retorna 0.0
+    total_receitas_pendentes = resultado_receitas_pendente[0] if resultado_receitas_pendente and resultado_receitas_pendente[0] else Decimal('0')  # Se for None, retorna 0.0
     total_aberto = total_receitas_pendentes
         
 
