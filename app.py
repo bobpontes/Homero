@@ -1,4 +1,4 @@
-import psycopg2
+#import psycopg2
 from flask import Flask, request, render_template, redirect, url_for, abort, Response, session
 from datetime import datetime, timedelta, date
 from werkzeug.security import check_password_hash
@@ -39,13 +39,14 @@ def adicionar_meses(data_base, meses):
 
 
 # função para chamar o banco de dados:
-def get_db():
-    conn = psycopg2.connect(
-        dbname="homero_db",
-        user="brunopontes",
-        host="localhost"
-    )
-    return conn
+from database.connection import get_db
+#def get_db():
+    #conn = psycopg2.connect(
+        #dbname="homero_db",
+        #user="brunopontes",
+        #host="localhost"
+    #)
+    #return conn
 
 # helper para aplicação de filtro no sql:
 def aplicar_condicao(filtro_sql, condicao):
