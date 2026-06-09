@@ -24,18 +24,19 @@ def login_required(f):
     return decorated_function
 
 # Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
-def adicionar_meses(data_base, meses):
-    dia_original = data_base.day
+from utils.datas import adicionar_meses
+#def adicionar_meses(data_base, meses):
+    #dia_original = data_base.day
 
-    mes = data_base.month -1 + meses
-    ano = data_base.year + mes // 12
-    mes = mes % 12 + 1
+    #mes = data_base.month -1 + meses
+    #ano = data_base.year + mes // 12
+    #mes = mes % 12 + 1
     
-    ultimo_dia = calendar.monthrange(ano, mes)[1]
+    #ultimo_dia = calendar.monthrange(ano, mes)[1]
 
-    # mantém o mesmo dia sempre que possível
-    dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
-    return date(ano, mes, dia)
+    ## mantém o mesmo dia sempre que possível
+    #dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
+    #return date(ano, mes, dia)
 
 
 # função para chamar o banco de dados:
