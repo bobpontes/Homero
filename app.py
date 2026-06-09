@@ -3,7 +3,7 @@ from flask import Flask, request, render_template, redirect, url_for, abort, Res
 from datetime import datetime, timedelta, date
 from werkzeug.security import check_password_hash
 from functools import wraps
-import calendar
+#import calendar
 import shutil
 import os
 import csv
@@ -50,11 +50,12 @@ from database.connection import get_db
     #return conn
 
 # helper para aplicação de filtro no sql:
-def aplicar_condicao(filtro_sql, condicao):
-    if filtro_sql:
-        return filtro_sql + " AND " + condicao
-    else:
-        return "WHERE " + condicao
+from utils.sql import aplicar_condicao
+#def aplicar_condicao(filtro_sql, condicao):
+    #if filtro_sql:
+        #return filtro_sql + " AND " + condicao
+    #else:
+        #return "WHERE " + condicao
 
 # Formatar mês por extenso em pt-BR:
 meses = {
