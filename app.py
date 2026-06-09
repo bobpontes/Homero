@@ -1,4 +1,4 @@
-import sqlite3
+import psycopg2
 from flask import Flask, request, render_template, redirect, url_for, abort, Response, session
 from datetime import datetime, timedelta, date
 from werkzeug.security import check_password_hash
@@ -7,12 +7,13 @@ import calendar
 import shutil
 import os
 import csv
+from decimal import Decimal
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev_key")
 
 # Data de hoje
-today = date.today().strftime("%Y-%m-%d")
+today = date.today()
 
 def login_required(f):
     @wraps(f)
@@ -39,8 +40,11 @@ def adicionar_meses(data_base, meses):
 
 # função para chamar o banco de dados:
 def get_db():
-    conn = sqlite3.connect("escola.db")
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = psycopg2.connect(
+        dbname="homero_db",
+        user="brunopontes",
+        host="localhost"
+    )
     return conn
 
 # helper para aplicação de filtro no sql:
@@ -93,7 +97,7 @@ def home():
 
     if busca:
         cursor.execute(
-            "SELECT * FROM alunos WHERE nome LIKE ?",
+            "SELECT * FROM alunos WHERE nome ILIKE %s",
             (f"%{busca}%", )
         )
     else:
@@ -115,7 +119,7 @@ def remover_aluno(id):
     cursor = conn.cursor()
 
 
-    cursor.execute("SELECT * FROM alunos WHERE id = ?", (id, ))
+    cursor.execute("SELECT * FROM alunos WHERE id = %s", (id, ))
     aluno = cursor.fetchone()
 
     if aluno is None:
@@ -123,9 +127,9 @@ def remover_aluno(id):
         abort(404)
 
     # apagar mensalidades associadas a este aluno (antes de apagar o aluno)
-    cursor.execute("DELETE FROM mensalidades WHERE aluno_id = ?", (id, ))
+    cursor.execute("DELETE FROM mensalidades WHERE aluno_id = %s", (id, ))
     # (após) apagar o aluno do banco
-    cursor.execute("DELETE FROM alunos WHERE id = ?", (id,))
+    cursor.execute("DELETE FROM alunos WHERE id = %s", (id,))
     conn.commit()
     conn.close()
 
@@ -139,7 +143,7 @@ def editar_aluno(id):
     cursor = conn.cursor()
 
     # buscar aluno primeiro:
-    cursor.execute("SELECT * FROM alunos WHERE id = ?", (id, ))
+    cursor.execute("SELECT * FROM alunos WHERE id = %s", (id, ))
     aluno = cursor.fetchone()
 
     if aluno is None:
@@ -154,7 +158,7 @@ def editar_aluno(id):
         turma = request.form.get("turma")
 
         cursor.execute(
-            "UPDATE alunos SET nome = ?, idade = ?, turma = ? WHERE id = ?",
+            "UPDATE alunos SET nome = %s, idade = %s, turma = %s WHERE id = %s",
             (nome, idade, turma, id)
         )
 
@@ -202,16 +206,16 @@ def financeiro():
     parametros = ()
 
     if data_inicio and data_fim:
-        filtro_sql = "WHERE date(mensalidades.data_vencimento) BETWEEN date(?) AND date(?)"
+        filtro_sql = "WHERE date(mensalidades.data_vencimento) BETWEEN date(%s) AND date(%s)"
         parametros = (data_inicio, data_fim)
     elif ano:
-        filtro_sql = "WHERE strftime('%Y', mensalidades.data_vencimento) = ?"
+        filtro_sql = "WHERE TO_CHAR(mensalidades.data_vencimento, 'YYYY') = %s"
         parametros = (ano, )
     else:
         if not mes:
             mes = date.today().strftime("%Y-%m")
             
-        filtro_sql = "WHERE strftime('%Y-%m', mensalidades.data_vencimento) = ?"
+        filtro_sql = "WHERE TO_CHAR(mensalidades.data_vencimento, 'YYYY-MM') = %s"
         parametros = (mes, )
 
     conn = get_db()
@@ -225,7 +229,7 @@ def financeiro():
                 CASE
                     WHEN mensalidades.status = 'pago' THEN 'Pago'
                     WHEN mensalidades.status = 'pendente'
-                        AND date(mensalidades.data_vencimento) < date('now')
+                        AND date(mensalidades.data_vencimento) < CURRENT_DATE
                     THEN 'Vencido'
                     ELSE 'Pendente'
                 END AS status
@@ -235,7 +239,7 @@ def financeiro():
             ORDER BY
                 CASE 
                     WHEN mensalidades.status = 'pendente'
-                        AND date(mensalidades.data_vencimento) < date('now') THEN 0 
+                        AND date(mensalidades.data_vencimento) < CURRENT_DATE THEN 0 
                     WHEN mensalidades.status = 'pendente' THEN 1
                     ELSE 2
                 END,
@@ -253,7 +257,7 @@ def financeiro():
         dias_atraso = 0
 
         if status == 'Vencido':
-            vencimento_data = date.fromisoformat(vencimento)
+            vencimento_data = vencimento
             dias_atraso = (date.today() - vencimento_data).days
 
         mensalidades_com_atraso.append(
@@ -265,7 +269,7 @@ def financeiro():
     SELECT COUNT(*)
     FROM mensalidades
     WHERE status = 'pendente'
-    AND date(data_vencimento) >= date('now')
+    AND data_vencimento >= CURRENT_DATE
     """)
     pendentes = cursor.fetchone()[0]
 
@@ -283,7 +287,7 @@ def financeiro():
     SELECT COUNT(*)
     FROM mensalidades
     WHERE status = 'pendente'
-    AND date(data_vencimento) < date('now')
+    AND data_vencimento < CURRENT_DATE
     """)
     vencidas = cursor.fetchone()[0]
 
@@ -294,31 +298,31 @@ def financeiro():
     WHERE status = 'pendente'
     """)
     resultado = cursor.fetchone()
-    total_aberto = resultado[0] if resultado[0] else 0.0  # Se for None, retorna 0.0
+    total_aberto = resultado[0] if resultado[0] else Decimal('0')  # Se for None, retorna 0.0
 
     # Calculo de Receita Prevista para Dashboard Financeiro
     cursor.execute("""
     SELECT SUM(valor)
-        FROM mensalidades WHERE status = 'pendente' AND strftime('%Y-%m', data_vencimento) = ?
+        FROM mensalidades WHERE status = 'pendente' AND TO_CHAR(data_vencimento, 'YYYY-MM') = %s
     """, (mes, ))
 
     resultado = cursor.fetchone()
-    receita_prevista = resultado[0] if resultado[0] else 0
+    receita_prevista = resultado[0] if resultado[0] else Decimal('0')
 
     # Calculo de Despesa Prevista para Dashboard Financeiro
     cursor.execute("""
     SELECT SUM(valor)
-        FROM contas_pagar WHERE status = 'pendente' AND strftime('%Y-%m', data_vencimento) = ?
+        FROM contas_pagar WHERE status = 'pendente' AND TO_CHAR(data_vencimento, 'YYYY-MM') = %s
     """, (mes, ))
 
     resultado = cursor.fetchone()
-    despesa_prevista = resultado[0] if resultado[0] else 0
+    despesa_prevista = resultado[0] if resultado[0] else Decimal('0')
 
     # Saldo Projetado
     saldo_projetado = receita_prevista - despesa_prevista
 
     # Contas Bancárias
-    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1")
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = TRUE")
     contas_banco = cursor.fetchall()
 
     conn.close()
@@ -353,7 +357,7 @@ def nova_mensalidade():
         conn.close()
         abort(400, "Aluno inválido.")
 
-    cursor.execute("SELECT id FROM alunos WHERE id = ?", (aluno_id, ))
+    cursor.execute("SELECT id FROM alunos WHERE id = %s", (aluno_id, ))
     aluno = cursor.fetchone()
 
     if not aluno:
@@ -387,8 +391,8 @@ def nova_mensalidade():
             data_parcela = adicionar_meses(data_base, i)
 
             cursor.execute(
-                "INSERT INTO mensalidades (aluno_id, valor, data_vencimento, grupo_parcela_id) VALUES (?, ?, ?, ?)",
-                (aluno_id, valor, data_parcela.strftime("%Y-%m-%d"), grupo_parcela_id)
+                "INSERT INTO mensalidades (aluno_id, valor, data_vencimento, grupo_parcela_id) VALUES (%s, %s, %s, %s)",
+                (aluno_id, valor, data_parcela, grupo_parcela_id)
             )
         conn.commit()
         conn.close()
@@ -424,7 +428,7 @@ def atualizar_valor_mensalidade(id):
     cursor.execute("""
         SELECT id, aluno_id, status
         FROM mensalidades
-        WHERE id = ?
+        WHERE id = %s
     """, (id,))
     mensalidade = cursor.fetchone()
 
@@ -438,7 +442,7 @@ def atualizar_valor_mensalidade(id):
         conn.close()
         abort(400, "Só é possível editar mensalidades pendentes.")
 
-    cursor.execute("SELECT id FROM alunos WHERE id = ?", (aluno_id,))
+    cursor.execute("SELECT id FROM alunos WHERE id = %s", (aluno_id,))
     aluno = cursor.fetchone()
 
     if not aluno:
@@ -448,8 +452,8 @@ def atualizar_valor_mensalidade(id):
     try:
         cursor.execute("""
             UPDATE mensalidades
-            SET valor = ?
-            WHERE id = ?
+            SET valor = %s
+            WHERE id = %s
               AND status = 'pendente'
         """, (novo_valor, id))
 
@@ -513,7 +517,7 @@ def detalhar_grupo_mensalidade(grupo_id):
             m.grupo_parcela_id
         FROM mensalidades m
         JOIN alunos a ON a.id = m.aluno_id
-        WHERE m.grupo_parcela_id = ?
+        WHERE m.grupo_parcela_id = %s
         ORDER BY m.data_vencimento ASC, m.id ASC
     """, (grupo_id,))
     parcelas = cursor.fetchall()
@@ -571,7 +575,7 @@ def atualizar_grupo_mensalidade(grupo_id):
     cursor.execute("""
         SELECT COUNT(DISTINCT aluno_id)
         FROM mensalidades
-        WHERE grupo_parcela_id = ?
+        WHERE grupo_parcela_id = %s
     """, (grupo_id, ))
 
     if cursor.fetchone()[0] != 1:
@@ -594,7 +598,7 @@ def atualizar_grupo_mensalidade(grupo_id):
         conn.close()
         abort(400, "Data de vencimento inválida.")
 
-    cursor.execute("SELECT id FROM mensalidades WHERE grupo_parcela_id = ?", (grupo_id,))
+    cursor.execute("SELECT id FROM mensalidades WHERE grupo_parcela_id = %s", (grupo_id,))
     if not cursor.fetchone():
         conn.close()
         abort(404)
@@ -603,7 +607,7 @@ def atualizar_grupo_mensalidade(grupo_id):
     cursor.execute("""
         SELECT MIN(data_vencimento)
         FROM mensalidades
-        WHERE grupo_parcela_id = ?
+        WHERE grupo_parcela_id = %s
         AND status = 'pendente'
     """, (grupo_id,))
     resultado = cursor.fetchone()
@@ -612,7 +616,7 @@ def atualizar_grupo_mensalidade(grupo_id):
     # transformar data de string para data:
     data_inicial_date = datetime.strptime(data_inicial, "%Y-%m-%d").date()
     if primeira_pendente:
-        primeira_pendente_date = datetime.strptime(primeira_pendente, "%Y-%m-%d").date()
+        primeira_pendente_date = primeira_pendente
 
         if primeira_pendente and data_inicial_date < primeira_pendente_date:
             data_inicial = primeira_pendente
@@ -620,9 +624,9 @@ def atualizar_grupo_mensalidade(grupo_id):
     cursor.execute("""
         SELECT COUNT(*)
         FROM mensalidades
-        WHERE grupo_parcela_id = ?
+        WHERE grupo_parcela_id = %s
           AND status = 'pendente'
-          AND date(data_vencimento) >= date(?)
+          AND data_vencimento >= %s
     """, (grupo_id, data_inicial))
     total_editaveis = cursor.fetchone()[0]
 
@@ -633,10 +637,10 @@ def atualizar_grupo_mensalidade(grupo_id):
     try:
         cursor.execute("""
             UPDATE mensalidades
-            SET valor = ?
-            WHERE grupo_parcela_id = ?
+            SET valor = %s
+            WHERE grupo_parcela_id = %s
               AND status = 'pendente'
-              AND date(data_vencimento) >= date(?)
+              AND data_vencimento >= %s
         """, (novo_valor, grupo_id, data_inicial))
         conn.commit()
     except Exception as e:
@@ -675,7 +679,7 @@ def atualizar_valor_mensalidade_no_grupo(grupo_id, id):
     cursor.execute("""
         SELECT id, aluno_id, status, grupo_parcela_id
         FROM mensalidades
-        WHERE id=?
+        WHERE id=%s
     """, (id, ))
     mensalidade = cursor.fetchone()
 
@@ -693,7 +697,7 @@ def atualizar_valor_mensalidade_no_grupo(grupo_id, id):
         conn.close()
         abort(400, "Só é possível editar mensalidades pendentes.")
 
-    cursor.execute("SELECT id FROM alunos WHERE id=?", (aluno_id, ))
+    cursor.execute("SELECT id FROM alunos WHERE id=%s", (aluno_id, ))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Aluno vinculado à mensalidade não foi encontrado.")
@@ -701,9 +705,9 @@ def atualizar_valor_mensalidade_no_grupo(grupo_id, id):
     try:
         cursor.execute("""
             UPDATE mensalidades
-            SET valor = ?
-            WHERE id = ?
-                AND grupo_parcela_id = ?
+            SET valor = %s
+            WHERE id = %s
+                AND grupo_parcela_id = %s
                 AND status = 'pendente'
         """, (novo_valor, id, grupo_id))
         conn.commit()
@@ -732,7 +736,7 @@ def registrar_pagamento(id):
     cursor = conn.cursor()
 
     # Primeiro: verificar se conta bancária existe:
-    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = %s", (conta_bancaria_id, ))
     conta_bancaria = cursor.fetchone()
 
     if not conta_bancaria:
@@ -740,7 +744,7 @@ def registrar_pagamento(id):
         abort(400, "Uma conta bancária inválida foi selecionada.")
 
     # Segundo: verificar se a mensalidade existe
-    cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("SELECT id FROM mensalidades WHERE id = %s", (id, ))
     mensalidade = cursor.fetchone()
 
     if not mensalidade:
@@ -748,7 +752,7 @@ def registrar_pagamento(id):
         abort(404)
 
     # Terceiro: verificar se a mensalidade ainda não foi paga
-    cursor.execute("SELECT status FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("SELECT status FROM mensalidades WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if resultado and resultado[0] == 'pago':
@@ -756,7 +760,7 @@ def registrar_pagamento(id):
         abort(400, "Não é possível registrar o pagamento, a mensalidade já havia sido paga.")
     
     # 4) Segurança: conferir o valor da mensalidade:
-    cursor.execute("SELECT valor FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("SELECT valor FROM mensalidades WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
@@ -780,7 +784,7 @@ def registrar_pagamento(id):
 
     try:
         # 5) Registrar o pagamento da conta:
-        cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""", 
+        cursor.execute("""UPDATE mensalidades SET status = 'pago', data_pagamento = %s, metodo_pagamento = %s, conta_bancaria_id = %s WHERE id = %s""",
             (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
 
         # 6) Atualizar tabela movimentacoes_bancarias:
@@ -788,7 +792,7 @@ def registrar_pagamento(id):
             SELECT alunos.nome
             FROM mensalidades
             JOIN alunos ON mensalidades.aluno_id = alunos.id
-            WHERE mensalidades.id = ?
+            WHERE mensalidades.id = %s
         """, (id, ))
         resultado_nome = cursor.fetchone()
 
@@ -801,7 +805,7 @@ def registrar_pagamento(id):
         cursor.execute("""
             INSERT INTO movimentacoes_bancarias
                        (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
-                       VALUES (?, 'entrada', ?, ?, 'mensalidade', ?, ?)
+                       VALUES (%s, 'entrada', %s, %s, 'mensalidade', %s, %s)
         """, (
             conta_bancaria_id,
             valor,
@@ -813,8 +817,8 @@ def registrar_pagamento(id):
         # 7) Atualizar saldo da conta bancária:
         cursor.execute("""
             UPDATE contas_bancarias
-            SET saldo = saldo + ?
-            WHERE id = ?
+            SET saldo = saldo + %s
+            WHERE id = %s
         """, (valor, conta_bancaria_id))
         
         conn.commit()
@@ -833,20 +837,39 @@ def registrar_pagamento(id):
 def estornar_mensalidade(id):
 
     # 0) Data da movimentação:
-    data_hoje = date.today().strftime("%Y-%m-%d")
+    data_hoje = date.today()
 
     conn = get_db()
     cursor = conn.cursor()
 
     # 1) Verifica se existe
-    cursor.execute("SELECT status, valor, conta_bancaria_id FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("SELECT status, conta_bancaria_id FROM mensalidades WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    status, valor, conta_bancaria_id = resultado
+    status, conta_bancaria_id = resultado
+
+    # 1.1) Verificar o valor:
+    cursor.execute("""
+        SELECT valor
+        FROM movimentacoes_bancarias
+        WHERE origem = 'mensalidade'
+        AND origem_id = %s
+        AND tipo = 'entrada'
+        ORDER BY id DESC
+        LIMIT 1
+    """, (id, ))
+
+    resultado_mov = cursor.fetchone()
+
+    if not resultado_mov:
+        conn.close()
+        abort(400, "Movimentação bancária original não encontrada.")
+
+    valor = resultado_mov[0]
 
     # 2) Segurança: Verifica se está pago
     if status != 'pago':
@@ -863,7 +886,7 @@ def estornar_mensalidade(id):
         SELECT alunos.nome
         FROM mensalidades
         JOIN alunos ON mensalidades.aluno_id = alunos.id
-        WHERE mensalidades.id = ?
+        WHERE mensalidades.id = %s
     """, (id, ))
     resultado_nome = cursor.fetchone()
 
@@ -881,14 +904,14 @@ def estornar_mensalidade(id):
                 data_pagamento = NULL,
                 metodo_pagamento = NULL,
                 conta_bancaria_id = NULL
-            WHERE id = ?
+            WHERE id = %s
         """, (id, ))
 
         # 6) Registrar a movimentação do Estorno
         cursor.execute("""
             INSERT INTO movimentacoes_bancarias
             (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
-            VALUES (?, 'estorno', ?, ?, 'mensalidade', ?, ?)
+            VALUES (%s, 'estorno', %s, %s, 'mensalidade', %s, %s)
         """, (
             conta_bancaria_id,
             valor,
@@ -900,8 +923,8 @@ def estornar_mensalidade(id):
         # 7) Reverter Saldo (entrada vira saída)
         cursor.execute("""
             UPDATE contas_bancarias
-            SET saldo = saldo - ?
-            WHERE id = ?
+            SET saldo = saldo - %s
+            WHERE id = %s
         """, (valor, conta_bancaria_id))
 
         conn.commit()
@@ -922,7 +945,7 @@ def remover_mensalidade(id):
     cursor = conn.cursor()
 
     # Verificar se mensalidade existe
-    cursor.execute("SELECT id FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("SELECT id FROM mensalidades WHERE id = %s", (id, ))
     mensalidade = cursor.fetchone()
 
     if not mensalidade:
@@ -930,14 +953,14 @@ def remover_mensalidade(id):
         abort(404)
 
     # Verficar se mensalidade ainda não foi paga
-    cursor.execute("SELECT status FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("SELECT status FROM mensalidades WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if resultado and resultado[0] == 'pago':
         conn.close()
         abort(400, "Não é possível excluir uma mensalidade que já foi registrada como paga.")
 
-    cursor.execute("DELETE FROM mensalidades WHERE id = ?", (id, ))
+    cursor.execute("DELETE FROM mensalidades WHERE id = %s", (id, ))
 
     conn.commit()
     conn.close()
@@ -952,7 +975,7 @@ def remover_grupo_mensalidade(grupo_id):
     cursor = conn.cursor()
 
     # Verificar se o grupo existe
-    cursor.execute("SELECT grupo_parcela_id FROM mensalidades WHERE grupo_parcela_id = ?", (grupo_id, ))
+    cursor.execute("SELECT grupo_parcela_id FROM mensalidades WHERE grupo_parcela_id = %s", (grupo_id, ))
     grupo = cursor.fetchone()
 
     if not grupo:
@@ -960,14 +983,14 @@ def remover_grupo_mensalidade(grupo_id):
         abort(400, "Este grupo de parcelas não existe, portanto nenhuma mensalidade foi excluída.")
 
     # Verificar se existe alguma mensalidade paga no grupo
-    cursor.execute("""SELECT status FROM mensalidades WHERE grupo_parcela_id = ? AND status = 'pago'""", (grupo_id, ))
+    cursor.execute("""SELECT status FROM mensalidades WHERE grupo_parcela_id = %s AND status = 'pago'""", (grupo_id, ))
     existe_pago = cursor.fetchone()
 
     if existe_pago:
         conn.close()
         abort(400, "Não é possível excluir um grupo com mensalidades já pagas.")
 
-    cursor.execute("DELETE FROM mensalidades WHERE grupo_parcela_id = ?", (grupo_id, ))
+    cursor.execute("DELETE FROM mensalidades WHERE grupo_parcela_id = %s", (grupo_id, ))
 
     conn.commit()
     conn.close()
@@ -1009,12 +1032,12 @@ def nova_conta():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id, ))
+    cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (plano_conta_id, ))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Plano de conta não encontrado.")
 
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id, ))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id, ))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Fornecedor não encontrado.")
@@ -1032,8 +1055,8 @@ def nova_conta():
         data_parcela = adicionar_meses(data_base, i)
 
         cursor.execute(
-            "INSERT INTO contas_pagar (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id, fornecedor_id) VALUES (?, ?, ?, ?, ?, ?)",
-            (descricao, valor, data_parcela.strftime("%Y-%m-%d"), plano_conta_id, grupo_parcela_id, fornecedor_id)
+            "INSERT INTO contas_pagar (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id, fornecedor_id) VALUES (%s, %s, %s, %s, %s, %s)",
+            (descricao, valor, data_parcela, plano_conta_id, grupo_parcela_id, fornecedor_id)
         )
 
     conn.commit()
@@ -1056,7 +1079,7 @@ def contas_pagar():
             CASE
                 WHEN contas_pagar.status = 'pago' THEN 'Pago'
                 WHEN contas_pagar.status = 'pendente'
-                    AND date(contas_pagar.data_vencimento) < date('now')
+                    AND date(contas_pagar.data_vencimento) < CURRENT_DATE
                 THEN 'Vencido'
                 ELSE 'Pendente'
             END AS status,
@@ -1072,7 +1095,7 @@ def contas_pagar():
         ORDER BY
             CASE
                 WHEN contas_pagar.status = 'pendente'
-                    AND date(contas_pagar.data_vencimento) < date('now') THEN 0
+                    AND date(contas_pagar.data_vencimento) < CURRENT_DATE THEN 0
                 WHEN contas_pagar.status = 'pendente' THEN 1
                 ELSE 2
             END,
@@ -1089,7 +1112,7 @@ def contas_pagar():
         dias_atraso = 0
 
         if status == 'Vencido':
-            vencimento_data = date.fromisoformat(vencimento)
+            vencimento_data = vencimento
             dias_atraso = (date.today() - vencimento_data).days
         
         contas_com_atraso.append(
@@ -1107,7 +1130,7 @@ def contas_pagar():
     cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
     fornecedores = cursor.fetchall()
 
-    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = TRUE ORDER BY nome")
     contas_banco = cursor.fetchall()
 
     conn.close()
@@ -1154,7 +1177,7 @@ def atualizar_conta_pagar(id):
         conn.close()
         abort(400, "Plano de conta ou fornecedor inválido.")
 
-    cursor.execute("SELECT status FROM contas_pagar WHERE id = ?", (id,))
+    cursor.execute("SELECT status FROM contas_pagar WHERE id = %s", (id,))
     conta = cursor.fetchone()
 
     if not conta:
@@ -1165,12 +1188,12 @@ def atualizar_conta_pagar(id):
         conn.close()
         abort(400, "Só é possível editar contas pendentes.")
 
-    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id,))
+    cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (plano_conta_id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Plano de conta não encontrado.")
 
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Fornecedor não encontrado.")
@@ -1178,12 +1201,12 @@ def atualizar_conta_pagar(id):
     try:
         cursor.execute("""
             UPDATE contas_pagar
-            SET descricao = ?,
-                valor = ?,
-                data_vencimento = ?,
-                plano_conta_id = ?,
-                fornecedor_id = ?
-            WHERE id = ?
+            SET descricao = %s,
+                valor = %s,
+                data_vencimento = %s,
+                plano_conta_id = %s,
+                fornecedor_id = %s
+            WHERE id = %s
               AND status = 'pendente'
         """, (descricao, valor, data_vencimento, plano_conta_id, fornecedor_id, id))
 
@@ -1267,7 +1290,7 @@ def detalhar_grupo_conta_pagar(grupo_id):
         FROM contas_pagar cp
         LEFT JOIN plano_contas pc ON cp.plano_conta_id = pc.id
         LEFT JOIN fornecedores f ON cp.fornecedor_id = f.id
-        WHERE cp.grupo_parcela_id = ?
+        WHERE cp.grupo_parcela_id = %s
         ORDER BY cp.data_vencimento ASC, cp.id ASC
     """, (grupo_id,))
     parcelas = cursor.fetchall()
@@ -1353,7 +1376,7 @@ def atualizar_grupo_conta_pagar(grupo_id):
             conn.close()
             abort(400, "Plano de conta inválido.")
 
-        cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (novo_plano_conta_id_int,))
+        cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (novo_plano_conta_id_int,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Plano de conta não encontrado.")
@@ -1366,12 +1389,12 @@ def atualizar_grupo_conta_pagar(grupo_id):
             conn.close()
             abort(400, "Fornecedor inválido.")
 
-        cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (novo_fornecedor_id_int,))
+        cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (novo_fornecedor_id_int,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Fornecedor não encontrado.")
 
-    cursor.execute("SELECT id FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id,))
+    cursor.execute("SELECT id FROM contas_pagar WHERE grupo_parcela_id = %s", (grupo_id,))
     if not cursor.fetchone():
         conn.close()
         abort(404)
@@ -1379,9 +1402,9 @@ def atualizar_grupo_conta_pagar(grupo_id):
     cursor.execute("""
         SELECT COUNT(*)
         FROM contas_pagar
-        WHERE grupo_parcela_id = ?
+        WHERE grupo_parcela_id = %s
           AND status = 'pendente'
-          AND date(data_vencimento) >= date(?)
+          AND data_vencimento >= %s
     """, (grupo_id, data_inicial))
     total_editaveis = cursor.fetchone()[0]
 
@@ -1392,13 +1415,13 @@ def atualizar_grupo_conta_pagar(grupo_id):
     try:
         cursor.execute("""
             UPDATE contas_pagar
-            SET descricao = COALESCE(?, descricao),
-                valor = COALESCE(?, valor),
-                plano_conta_id = COALESCE(?, plano_conta_id),
-                fornecedor_id = COALESCE(?, fornecedor_id)
-            WHERE grupo_parcela_id = ?
+            SET descricao = COALESCE(%s, descricao),
+                valor = COALESCE(%s, valor),
+                plano_conta_id = COALESCE(%s, plano_conta_id),
+                fornecedor_id = COALESCE(%s, fornecedor_id)
+            WHERE grupo_parcela_id = %s
               AND status = 'pendente'
-              AND date(data_vencimento) >= date(?)
+              AND data_vencimento >= %s
         """, (
             nova_descricao or None,
             novo_valor_float,
@@ -1461,7 +1484,7 @@ def atualizar_conta_pagar_no_grupo(grupo_id, id):
             conn.close()
             abort(400, "Plano de conta inválido.")
 
-        cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id_int,))
+        cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (plano_conta_id_int,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Plano de conta não encontrado.")
@@ -1474,7 +1497,7 @@ def atualizar_conta_pagar_no_grupo(grupo_id, id):
             conn.close()
             abort(400, "Fornecedor inválido.")
 
-        cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id_int,))
+        cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id_int,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Fornecedor não encontrado.")
@@ -1482,7 +1505,7 @@ def atualizar_conta_pagar_no_grupo(grupo_id, id):
     cursor.execute("""
         SELECT id, status, grupo_parcela_id
         FROM contas_pagar
-        WHERE id = ?
+        WHERE id = %s
     """, (id,))
     conta = cursor.fetchone()
 
@@ -1503,13 +1526,13 @@ def atualizar_conta_pagar_no_grupo(grupo_id, id):
     try:
         cursor.execute("""
             UPDATE contas_pagar
-            SET descricao = ?,
-                valor = ?,
-                data_vencimento = ?,
-                plano_conta_id = ?,
-                fornecedor_id = ?
-            WHERE id = ?
-            AND grupo_parcela_id = ?
+            SET descricao = %s,
+                valor = %s,
+                data_vencimento = %s,
+                plano_conta_id = %s,
+                fornecedor_id = %s
+            WHERE id = %s
+            AND grupo_parcela_id = %s
             AND status = 'pendente'
         """, (descricao, valor_float, data_vencimento, plano_conta_id_int, fornecedor_id_int, id, grupo_id))
 
@@ -1541,7 +1564,7 @@ def registrar_conta(id):
     cursor = conn.cursor()
 
     # 1) Verifica se a conta bancária existe:
-    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = %s", (conta_bancaria_id, ))
     conta_bancaria = cursor.fetchone()
 
     if not conta_bancaria:
@@ -1549,7 +1572,7 @@ def registrar_conta(id):
         abort(400, "Conta bancária inválida, pagamento não registrado.")
 
     # 2) Verificar se conta existe:
-    cursor.execute("SELECT id FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT id FROM contas_pagar WHERE id = %s", (id, ))
     conta = cursor.fetchone()
 
     if not conta:
@@ -1557,7 +1580,7 @@ def registrar_conta(id):
         abort(404)
 
     # 3) Verificar se conta já está paga:
-    cursor.execute("SELECT status FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT status FROM contas_pagar WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if resultado and resultado[0] == 'pago':
@@ -1565,7 +1588,7 @@ def registrar_conta(id):
         abort(400, "Conta já está paga.")
 
     # 4) Segurança: conferir valor da conta para pagar:
-    cursor.execute("SELECT descricao, valor FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT descricao, valor FROM contas_pagar WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
@@ -1597,11 +1620,11 @@ def registrar_conta(id):
         cursor.execute("""
             UPDATE contas_pagar
                        SET status = 'pago',
-                       data_pagamento = ?,
-                       metodo_pagamento = ?,
-                       conta_bancaria_id = ?,
-                       descricao = ?
-                       WHERE id = ?""",
+                       data_pagamento = %s,
+                       metodo_pagamento = %s,
+                       conta_bancaria_id = %s,
+                       descricao = %s
+                       WHERE id = %s""",
             (data_pagamento, metodo_pagamento, conta_bancaria_id, nova_descricao, id)
         )
 
@@ -1609,7 +1632,7 @@ def registrar_conta(id):
         cursor.execute("""
             INSERT INTO movimentacoes_bancarias
                 (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
-                VALUES (?, 'saida', ?, ?, 'contas_pagar', ?, ?)
+                VALUES (%s, 'saida', %s, %s, 'contas_pagar', %s, %s)
         """, (
             conta_bancaria_id,
             valor,
@@ -1621,8 +1644,8 @@ def registrar_conta(id):
         # 7) Atualizar saldo da conta bancária:
         cursor.execute("""
             UPDATE contas_bancarias
-            SET saldo = saldo - ?
-            WHERE id = ?
+            SET saldo = saldo - %s
+            WHERE id = %s
         """, (valor, conta_bancaria_id))
 
         conn.commit()
@@ -1641,20 +1664,39 @@ def registrar_conta(id):
 def estornar_contas_pagar(id):
 
     # 0) Data da movimentação:
-    data_hoje = date.today().strftime("%Y-%m-%d")
+    data_hoje = date.today()
 
     conn = get_db()
     cursor = conn.cursor()
 
     # 1) Verifica se existe
-    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT descricao, status, conta_bancaria_id FROM contas_pagar WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    descricao, status, valor, conta_bancaria_id = resultado
+    descricao, status, conta_bancaria_id = resultado
+
+    # 1.1) Verificar o valor:
+    cursor.execute("""
+        SELECT valor
+        FROM movimentacoes_bancarias
+        WHERE origem = 'contas_pagar'
+        AND origem_id = %s
+        AND tipo = 'saida'
+        ORDER BY id DESC
+        LIMIT 1
+    """, (id, ))
+
+    resultado_mov = cursor.fetchone()
+
+    if not resultado_mov:
+        conn.close()
+        abort(400, "Movimentação bancária original não encontrada.")
+
+    valor = resultado_mov[0]
 
     # 2) Segurança: Verifica se está pago
     if status != 'pago':
@@ -1674,14 +1716,14 @@ def estornar_contas_pagar(id):
                 data_pagamento = NULL,
                 metodo_pagamento = NULL,
                 conta_bancaria_id = NULL
-            WHERE id = ?
+            WHERE id = %s
         """, (id, ))
 
         # 5) Registrar a movimentação do Estorno
         cursor.execute("""
             INSERT INTO movimentacoes_bancarias
             (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
-            VALUES (?, 'estorno', ?, ?, 'contas_pagar', ?, ?)
+            VALUES (%s, 'estorno', %s, %s, 'contas_pagar', %s, %s)
         """, (
             conta_bancaria_id,
             valor,
@@ -1693,8 +1735,8 @@ def estornar_contas_pagar(id):
         # 6) Reverter Saldo (entrada vira saída)
         cursor.execute("""
             UPDATE contas_bancarias
-            SET saldo = saldo + ?
-            WHERE id = ?
+            SET saldo = saldo + %s
+            WHERE id = %s
         """, (valor, conta_bancaria_id))
 
         conn.commit()
@@ -1715,21 +1757,21 @@ def remover_conta(id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT id FROM contas_pagar WHERE id = %s", (id, ))
     conta = cursor.fetchone()
 
     if not conta:
         conn.close()
         abort(400, "Essa conta não existe, portanto não pode ser excluída.")
 
-    cursor.execute("SELECT status FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("SELECT status FROM contas_pagar WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if resultado and resultado[0] == 'pago':
         conn.close()
         abort(400, "Não é possível excluir conta já paga.")
 
-    cursor.execute("DELETE FROM contas_pagar WHERE id = ?", (id, ))
+    cursor.execute("DELETE FROM contas_pagar WHERE id = %s", (id, ))
 
     conn.commit()
     conn.close()
@@ -1744,7 +1786,7 @@ def remover_grupo_conta(grupo_id):
     cursor = conn.cursor()
 
     # Verificar se existe o grupo
-    cursor.execute("SELECT grupo_parcela_id FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id, ))
+    cursor.execute("SELECT grupo_parcela_id FROM contas_pagar WHERE grupo_parcela_id = %s", (grupo_id, ))
     grupo = cursor.fetchone()
 
     if not grupo:
@@ -1752,14 +1794,14 @@ def remover_grupo_conta(grupo_id):
         abort(400, "Este grupo de parcelas não existe, portanto nenhuma conta foi excluída.")
 
     # Verificar se já existe conta paga no grupo
-    cursor.execute("""SELECT status FROM contas_pagar WHERE grupo_parcela_id = ? AND status = 'pago'""", (grupo_id, ))
+    cursor.execute("""SELECT status FROM contas_pagar WHERE grupo_parcela_id = %s AND status = 'pago'""", (grupo_id, ))
     existe_pago = cursor.fetchone()
 
     if existe_pago:
         conn.close()
         abort(400, "Não é possível excluir um grupo com contas já pagas.")
 
-    cursor.execute("DELETE FROM contas_pagar WHERE grupo_parcela_id = ?", (grupo_id, ))
+    cursor.execute("DELETE FROM contas_pagar WHERE grupo_parcela_id = %s", (grupo_id, ))
 
     conn.commit()
     conn.close()
@@ -1780,7 +1822,7 @@ def contas_receber():
     parametros = ()
 
     if data_inicio and data_fim:
-        filtro_sql = "WHERE date(contas_receber.data_vencimento) BETWEEN date(?) AND date(?)"
+        filtro_sql = "WHERE DATE(contas_receber.data_vencimento) BETWEEN DATE(%s) AND DATE(%s)"
         parametros = (data_inicio, data_fim)
         
         mes1 = meses[data_inicio[5:7]]
@@ -1792,7 +1834,7 @@ def contas_receber():
         )
 
     elif ano:
-        filtro_sql = "WHERE strftime('%Y', contas_receber.data_vencimento) = ?"
+        filtro_sql = "WHERE TO_CHAR(contas_receber.data_vencimento, 'YYYY') = %s"
         parametros = (ano, )
         periodo_formatado = f"Ano de {ano}"
 
@@ -1800,7 +1842,7 @@ def contas_receber():
         if not mes:
             mes = date.today().strftime("%Y-%m")
             
-        filtro_sql = "WHERE strftime('%Y-%m', contas_receber.data_vencimento) = ?"
+        filtro_sql = "WHERE TO_CHAR(contas_receber.data_vencimento, 'YYYY-MM') = %s"
         parametros = (mes, )
         periodo_formatado = f"{meses[mes[5:7]]}/{mes[0:4]}"
 
@@ -1815,7 +1857,7 @@ def contas_receber():
             CASE
                 WHEN contas_receber.status = 'pago' THEN 'Pago'
                 WHEN contas_receber.status = 'pendente'
-                    AND date(contas_receber.data_vencimento) < date('now')
+                    AND date(contas_receber.data_vencimento) < CURRENT_DATE
                 THEN 'Vencido'
                 ELSE 'Pendente'
             END AS status,
@@ -1832,7 +1874,7 @@ def contas_receber():
         ORDER BY
             CASE
                 WHEN contas_receber.status = 'pendente'
-                    AND date(contas_receber.data_vencimento) < date('now') THEN 0
+                    AND date(contas_receber.data_vencimento) < CURRENT_DATE THEN 0
                 WHEN contas_receber.status = 'pendente' THEN 1
                 ELSE 2
             END,
@@ -1850,7 +1892,7 @@ def contas_receber():
         dias_atraso = 0
 
         if status == 'Vencido':
-            vencimento_data = date.fromisoformat(vencimento)
+            vencimento_data = vencimento
             dias_atraso = (date.today() - vencimento_data).days
         
         receitas_com_atraso.append(
@@ -1865,7 +1907,7 @@ def contas_receber():
     filtro_pagar = filtro_sql.replace("contas_receber", "contas_pagar")
 
     filtro_receber_status = aplicar_condicao(filtro_receber, "status = 'pendente'")
-    filtro_receber_vencidas = aplicar_condicao(filtro_receber, "status = 'pendente' AND date(data_vencimento) < date('now')")
+    filtro_receber_vencidas = aplicar_condicao(filtro_receber, "status = 'pendente' AND data_vencimento < CURRENT_DATE")
     filtro_receber_pago = aplicar_condicao(filtro_receber, "status = 'pago'")
 
     # Gráfico do Dashboard
@@ -1876,7 +1918,7 @@ def contas_receber():
     {filtro_receber}
     """, parametros)
     resultado_c_receber = cursor.fetchone()
-    total_contas_receber = resultado_c_receber[0] if resultado_c_receber and resultado_c_receber[0] else 0.0
+    total_contas_receber = resultado_c_receber[0] if resultado_c_receber and resultado_c_receber[0] else Decimal('0')
     total_receitas = total_contas_receber
 
     cursor.execute(f"""
@@ -1885,7 +1927,7 @@ def contas_receber():
     {filtro_mensalidades}
     """, parametros)
     resultado_mensalidades = cursor.fetchone()
-    total_contas_mensalidades = resultado_mensalidades[0] if resultado_mensalidades and resultado_mensalidades[0] else 0.0
+    total_contas_mensalidades = resultado_mensalidades[0] if resultado_mensalidades and resultado_mensalidades[0] else Decimal('0')
     total_mensalidades = total_contas_mensalidades
 
     receita_total = total_receitas + total_mensalidades
@@ -1897,7 +1939,7 @@ def contas_receber():
     {filtro_pagar}
     """, parametros)
     resultado_c_pagar = cursor.fetchone()
-    total_despesas = resultado_c_pagar[0] if resultado_c_pagar and resultado_c_pagar[0] else 0.0
+    total_despesas = resultado_c_pagar[0] if resultado_c_pagar and resultado_c_pagar[0] else Decimal('0')
 
     despesa_total = total_despesas
 
@@ -1942,7 +1984,7 @@ def contas_receber():
     {filtro_receber_status}
     """, parametros)
     resultado_receitas_pendente = cursor.fetchone()
-    total_receitas_pendentes = resultado_receitas_pendente[0] if resultado_receitas_pendente and resultado_receitas_pendente[0] else 0.0 # Se for None, retorna 0.0
+    total_receitas_pendentes = resultado_receitas_pendente[0] if resultado_receitas_pendente and resultado_receitas_pendente[0] else Decimal('0')  # Se for None, retorna 0.0
     total_aberto = total_receitas_pendentes
         
 
@@ -1955,7 +1997,7 @@ def contas_receber():
     cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
     fornecedores = cursor.fetchall()
 
-    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, nome FROM contas_bancarias WHERE ativo = TRUE ORDER BY nome")
     contas_banco = cursor.fetchall()
 
     conn.close()
@@ -2014,12 +2056,12 @@ def nova_receita():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id, ))
+    cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (plano_conta_id, ))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Plano de conta não encontrado.")
 
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id, ))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id, ))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Fornecedor não encontrado.")
@@ -2031,7 +2073,7 @@ def nova_receita():
             conn.close()
             abort(400, "Evento inválido.")
 
-        cursor.execute("SELECT id FROM eventos WHERE id = ?", (evento_id, ))
+        cursor.execute("SELECT id FROM eventos WHERE id = %s", (evento_id, ))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Evento não encontrado para associar a este recebimento.")
@@ -2051,8 +2093,8 @@ def nova_receita():
         data_parcela = adicionar_meses(data_base, i)
 
         cursor.execute(
-            "INSERT INTO contas_receber (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id, fornecedor_id, evento_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (descricao, valor, data_parcela.strftime("%Y-%m-%d"), plano_conta_id, grupo_parcela_id, fornecedor_id, evento_id)
+            "INSERT INTO contas_receber (descricao, valor, data_vencimento, plano_conta_id, grupo_parcela_id, fornecedor_id, evento_id) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (descricao, valor, data_parcela, plano_conta_id, grupo_parcela_id, fornecedor_id, evento_id)
         )
 
     conn.commit()
@@ -2107,7 +2149,7 @@ def atualizar_conta_receber(id):
             conn.close()
             abort(400, "Evento inválido.")
 
-        cursor.execute("SELECT id FROM eventos WHERE id = ?", (evento_id, ))
+        cursor.execute("SELECT id FROM eventos WHERE id = %s", (evento_id, ))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Evento não encontrado.")
@@ -2115,7 +2157,7 @@ def atualizar_conta_receber(id):
     else:
         evento_id = None
 
-    cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id,))
+    cursor.execute("SELECT status FROM contas_receber WHERE id = %s", (id,))
     conta = cursor.fetchone()
 
     if not conta:
@@ -2128,12 +2170,12 @@ def atualizar_conta_receber(id):
         conn.close()
         abort(400, "Só é possível editar contas pendentes.")
 
-    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id,))
+    cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (plano_conta_id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Plano de conta não encontrado.")
 
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id,))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Fornecedor não encontrado.")
@@ -2141,13 +2183,13 @@ def atualizar_conta_receber(id):
     try:
         cursor.execute("""
             UPDATE contas_receber
-            SET descricao = ?,
-                valor = ?,
-                data_vencimento = ?,
-                plano_conta_id = ?,
-                fornecedor_id = ?,
-                evento_id = ?
-            WHERE id = ?
+            SET descricao = %s,
+                valor = %s,
+                data_vencimento = %s,
+                plano_conta_id = %s,
+                fornecedor_id = %s,
+                evento_id = %s
+            WHERE id = %s
               AND status = 'pendente'
         """, (descricao, valor, data_vencimento, plano_conta_id, fornecedor_id, evento_id, id))
 
@@ -2231,7 +2273,7 @@ def detalhar_grupo_conta_receber(grupo_id):
         FROM contas_receber cr
         LEFT JOIN plano_contas pc ON cr.plano_conta_id = pc.id
         LEFT JOIN fornecedores f ON cr.fornecedor_id = f.id
-        WHERE cr.grupo_parcela_id = ?
+        WHERE cr.grupo_parcela_id = %s
         ORDER BY cr.data_vencimento ASC, cr.id ASC
     """, (grupo_id,))
     parcelas = cursor.fetchall()
@@ -2317,7 +2359,7 @@ def atualizar_grupo_conta_receber(grupo_id):
             conn.close()
             abort(400, "Plano de conta inválido.")
 
-        cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (novo_plano_conta_id_int,))
+        cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (novo_plano_conta_id_int,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Plano de conta não encontrado.")
@@ -2330,12 +2372,12 @@ def atualizar_grupo_conta_receber(grupo_id):
             conn.close()
             abort(400, "Cliente inválido.")
 
-        cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (novo_fornecedor_id_int,))
+        cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (novo_fornecedor_id_int,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Cliente não encontrado.")
 
-    cursor.execute("SELECT id FROM contas_receber WHERE grupo_parcela_id = ?", (grupo_id,))
+    cursor.execute("SELECT id FROM contas_receber WHERE grupo_parcela_id = %s", (grupo_id,))
     if not cursor.fetchone():
         conn.close()
         abort(404)
@@ -2343,9 +2385,9 @@ def atualizar_grupo_conta_receber(grupo_id):
     cursor.execute("""
         SELECT COUNT(*)
         FROM contas_receber
-        WHERE grupo_parcela_id = ?
+        WHERE grupo_parcela_id = %s
           AND status = 'pendente'
-          AND date(data_vencimento) >= date(?)
+          AND data_vencimento >= date(%s)
     """, (grupo_id, data_inicial))
     total_editaveis = cursor.fetchone()[0]
 
@@ -2356,13 +2398,13 @@ def atualizar_grupo_conta_receber(grupo_id):
     try:
         cursor.execute("""
             UPDATE contas_receber
-            SET descricao = COALESCE(?, descricao),
-                valor = COALESCE(?, valor),
-                plano_conta_id = COALESCE(?, plano_conta_id),
-                fornecedor_id = COALESCE(?, fornecedor_id)
-            WHERE grupo_parcela_id = ?
+            SET descricao = COALESCE(%s, descricao),
+                valor = COALESCE(%s, valor),
+                plano_conta_id = COALESCE(%s, plano_conta_id),
+                fornecedor_id = COALESCE(%s, fornecedor_id)
+            WHERE grupo_parcela_id = %s
               AND status = 'pendente'
-              AND date(data_vencimento) >= date(?)
+              AND data_vencimento >= %s
         """, (
             nova_descricao or None,
             novo_valor_float,
@@ -2422,12 +2464,12 @@ def atualizar_conta_receber_no_grupo(grupo_id, id):
         conn.close()
         abort(400, "Plano de conta ou cliente inválido.")
 
-    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (plano_conta_id_int,))
+    cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (plano_conta_id_int,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Plano de conta não encontrado.")
 
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (fornecedor_id_int,))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (fornecedor_id_int,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Cliente não encontrado.")
@@ -2435,7 +2477,7 @@ def atualizar_conta_receber_no_grupo(grupo_id, id):
     cursor.execute("""
         SELECT id, status, grupo_parcela_id
         FROM contas_receber
-        WHERE id = ?
+        WHERE id = %s
     """, (id,))
     conta = cursor.fetchone()
 
@@ -2456,13 +2498,13 @@ def atualizar_conta_receber_no_grupo(grupo_id, id):
     try:
         cursor.execute("""
             UPDATE contas_receber
-            SET descricao = ?,
-                valor = ?,
-                data_vencimento = ?,
-                plano_conta_id = ?,
-                fornecedor_id = ?
-            WHERE id = ?
-              AND grupo_parcela_id = ?
+            SET descricao = %s,
+                valor = %s,
+                data_vencimento = %s,
+                plano_conta_id = %s,
+                fornecedor_id = %s
+            WHERE id = %s
+              AND grupo_parcela_id = %s
               AND status = 'pendente'
         """, (descricao, valor_float, data_vencimento, plano_conta_id_int, fornecedor_id_int, id, grupo_id))
 
@@ -2492,7 +2534,7 @@ def registrar_receita(id):
     cursor = conn.cursor()
 
     # 1) Verifica conta bancária:
-    cursor.execute("SELECT id FROM contas_bancarias WHERE id = ?", (conta_bancaria_id, ))
+    cursor.execute("SELECT id FROM contas_bancarias WHERE id = %s", (conta_bancaria_id, ))
     conta_bancaria = cursor.fetchone()
 
     if not conta_bancaria:
@@ -2500,7 +2542,7 @@ def registrar_receita(id):
         abort(400, "Conta bancária inválida.")
 
     # 2) Verificar se conta existe:
-    cursor.execute("SELECT id FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("SELECT id FROM contas_receber WHERE id = %s", (id, ))
     receita = cursor.fetchone()
 
     if not receita:
@@ -2508,7 +2550,7 @@ def registrar_receita(id):
         abort(404)
 
     # 3) Verificar se conta já está paga:
-    cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("SELECT status FROM contas_receber WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if resultado and resultado[0] == 'pago':
@@ -2516,7 +2558,7 @@ def registrar_receita(id):
         abort(400, "Recebimento já está pago.")
 
     # 4) Segurança: conferir descrição e valor da conta para recebimento:
-    cursor.execute("SELECT descricao, valor FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("SELECT descricao, valor FROM contas_receber WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
@@ -2540,14 +2582,14 @@ def registrar_receita(id):
 
     try:
         # 5) Existe a conta, seguir com o pagamento:
-        cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = ?, metodo_pagamento = ?, conta_bancaria_id = ? WHERE id = ?""",
+        cursor.execute("""UPDATE contas_receber SET status = 'pago', data_pagamento = %s, metodo_pagamento = %s, conta_bancaria_id = %s WHERE id = %s""",
             (data_pagamento, metodo_pagamento, conta_bancaria_id, id))
 
         # 6) Atualizar tabela movimentacoes_bancarias:
         cursor.execute("""
             INSERT INTO movimentacoes_bancarias
                     (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
-                    VALUES (?, 'entrada', ?, ?, 'contas_receber', ?, ?)
+                    VALUES (%s, 'entrada', %s, %s, 'contas_receber', %s, %s)
         """, (
             conta_bancaria_id,
             valor,
@@ -2559,8 +2601,8 @@ def registrar_receita(id):
         # 7) Atualizar saldo da conta bancária:
         cursor.execute("""
             UPDATE contas_bancarias
-            SET saldo = saldo + ?
-            WHERE id = ?
+            SET saldo = saldo + %s
+            WHERE id = %s
         """, (valor, conta_bancaria_id))
 
         conn.commit()
@@ -2578,20 +2620,39 @@ def registrar_receita(id):
 def estornar_contas_receber(id):
 
     # 0) Data da movimentação:
-    data_hoje = date.today().strftime("%Y-%m-%d")
+    data_hoje = date.today()
 
     conn = get_db()
     cursor = conn.cursor()
 
     # 1) Verifica se existe
-    cursor.execute("SELECT descricao, status, valor, conta_bancaria_id FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("SELECT descricao, status, conta_bancaria_id FROM contas_receber WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if not resultado:
         conn.close()
         abort(404)
 
-    descricao, status, valor, conta_bancaria_id = resultado
+    descricao, status, conta_bancaria_id = resultado
+
+    # 1.1) Verificar valor:
+    cursor.execute("""
+        SELECT valor
+        FROM movimentacoes_bancarias
+        WHERE origem = 'contas_receber'
+        AND origem_id = %s
+        AND tipo = 'entrada'
+        ORDER BY id DESC
+        LIMIT 1
+    """, (id, ))
+
+    resultado_mov = cursor.fetchone()
+
+    if not resultado_mov:
+        conn.close()
+        abort(400, "Movimentação bancária original não encontrada.")
+
+    valor = resultado_mov[0]
 
     # 2) Segurança: Verifica se está pago
     if status != 'pago':
@@ -2611,14 +2672,14 @@ def estornar_contas_receber(id):
                 data_pagamento = NULL,
                 metodo_pagamento = NULL,
                 conta_bancaria_id = NULL
-            WHERE id = ?
+            WHERE id = %s
         """, (id, ))
 
         # 5) Registrar a movimentação do Estorno
         cursor.execute("""
             INSERT INTO movimentacoes_bancarias
             (conta_bancaria_id, tipo, valor, data, origem, origem_id, descricao)
-            VALUES (?, 'estorno', ?, ?, 'contas_receber', ?, ?)
+            VALUES (%s, 'estorno', %s, %s, 'contas_receber', %s, %s)
         """, (
             conta_bancaria_id,
             valor,
@@ -2630,8 +2691,8 @@ def estornar_contas_receber(id):
         # 6) Reverter Saldo (entrada vira saída)
         cursor.execute("""
             UPDATE contas_bancarias
-            SET saldo = saldo - ?
-            WHERE id = ?
+            SET saldo = saldo - %s
+            WHERE id = %s
         """, (valor, conta_bancaria_id))
 
         conn.commit()
@@ -2652,21 +2713,21 @@ def remover_receita(id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("SELECT id FROM contas_receber WHERE id = %s", (id, ))
     receita = cursor.fetchone()
 
     if not receita:
         conn.close()
         abort(400, "Esse recebimento não existe, portanto não pode ser excluída.")
 
-    cursor.execute("SELECT status FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("SELECT status FROM contas_receber WHERE id = %s", (id, ))
     resultado = cursor.fetchone()
 
     if resultado and resultado[0] == 'pago':
         conn.close()
         abort(400, "Não é possível excluir recebimento já pago.")
 
-    cursor.execute("DELETE FROM contas_receber WHERE id = ?", (id, ))
+    cursor.execute("DELETE FROM contas_receber WHERE id = %s", (id, ))
 
     conn.commit()
     conn.close()
@@ -2681,7 +2742,7 @@ def remover_grupo_receita(grupo_id):
     cursor = conn.cursor()
 
     # Verificar se existe o grupo
-    cursor.execute("SELECT grupo_parcela_id FROM contas_receber WHERE grupo_parcela_id = ?", (grupo_id, ))
+    cursor.execute("SELECT grupo_parcela_id FROM contas_receber WHERE grupo_parcela_id = %s", (grupo_id, ))
     grupo = cursor.fetchone()
 
     if not grupo:
@@ -2689,14 +2750,14 @@ def remover_grupo_receita(grupo_id):
         abort(400, "Este grupo de parcelas não existe, portanto nenhum recebimento foi excluído.")
 
     # Verificar se já existe conta paga no grupo
-    cursor.execute("""SELECT status FROM contas_receber WHERE grupo_parcela_id = ? AND status = 'pago'""", (grupo_id, ))
+    cursor.execute("""SELECT status FROM contas_receber WHERE grupo_parcela_id = %s AND status = 'pago'""", (grupo_id, ))
     existe_pago = cursor.fetchone()
 
     if existe_pago:
         conn.close()
         abort(400, "Não é possível excluir um grupo com recebimentos já pagos.")
 
-    cursor.execute("DELETE FROM contas_receber WHERE grupo_parcela_id = ?", (grupo_id, ))
+    cursor.execute("DELETE FROM contas_receber WHERE grupo_parcela_id = %s", (grupo_id, ))
 
     conn.commit()
     conn.close()
@@ -2728,7 +2789,7 @@ def nova_conta_bancaria():
     nome = request.form.get("nome")
     tipo = request.form.get("tipo") or "outro"
     saldo = request.form.get("saldo")
-    ativo = 1 if request.form.get("ativo") else 0
+    ativo = True if request.form.get("ativo") else False
 
     if not nome:
         abort(400, "Nome da conta é obrigatório.")
@@ -2741,7 +2802,7 @@ def nova_conta_bancaria():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT nome FROM contas_bancarias WHERE nome = ?", (nome, ))
+    cursor.execute("SELECT nome FROM contas_bancarias WHERE nome = %s", (nome, ))
     conta_existente = cursor.fetchone()
 
     if conta_existente:
@@ -2749,7 +2810,7 @@ def nova_conta_bancaria():
         abort(400, "Esta conta já foi registrada em nosso sistema.")    
     
     cursor.execute(
-        "INSERT INTO contas_bancarias (nome, tipo, saldo, ativo) VALUES (?, ?, ?, ?)",
+        "INSERT INTO contas_bancarias (nome, tipo, saldo, ativo) VALUES (%s, %s, %s, %s)",
         (nome, tipo, saldo, ativo)
     )
     
@@ -2854,7 +2915,7 @@ def novo_fornecedor():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT nome FROM fornecedores WHERE nome = ?", (nome, ))
+    cursor.execute("SELECT nome FROM fornecedores WHERE nome = %s", (nome, ))
     nome_existente = cursor.fetchone()
 
     if nome_existente:
@@ -2863,7 +2924,7 @@ def novo_fornecedor():
 
     try:
         cursor.execute(
-            "INSERT INTO fornecedores (nome, telefone, email, CPF, CNPJ) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO fornecedores (nome, telefone, email, CPF, CNPJ) VALUES (%s, %s, %s, %s, %s)",
             (nome, telefone, email, cpf, cnpj)
         )
 
@@ -2886,7 +2947,7 @@ def editar_fornecedor(id):
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT id, nome, telefone, email, cpf, cnpj FROM fornecedores WHERE id = ?",
+        "SELECT id, nome, telefone, email, cpf, cnpj FROM fornecedores WHERE id = %s",
         (id,)
     )
     fornecedor = cursor.fetchone()
@@ -2934,8 +2995,8 @@ def editar_fornecedor(id):
             cursor.execute(
                 """
                 UPDATE fornecedores
-                SET nome = ?, telefone = ?, email = ?, CPF = ?, CNPJ = ?
-                WHERE id = ?
+                SET nome = %s, telefone = %s, email = %s, CPF = %s, CNPJ = %s
+                WHERE id = %s
                 """,
                 (nome, telefone, email, cpf, cnpj, id)
             )
@@ -2959,21 +3020,21 @@ def remover_fornecedor(id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM fornecedores WHERE id = ?", (id,))
+    cursor.execute("SELECT id FROM fornecedores WHERE id = %s", (id,))
     fornecedor = cursor.fetchone()
 
     if not fornecedor:
         conn.close()
         abort(400, "Esse fornecedor não existe, portanto não pode ser excluído.")
 
-    cursor.execute("SELECT id FROM contas_pagar WHERE fornecedor_id = ?", (id,))
+    cursor.execute("SELECT id FROM contas_pagar WHERE fornecedor_id = %s", (id,))
     conta_pagar = cursor.fetchone()
 
     if conta_pagar:
         conn.close()
         abort(400, "Não é possível excluir fornecedor que está vinculado com contas a pagar.")
 
-    cursor.execute("SELECT id FROM contas_receber WHERE fornecedor_id = ?", (id,))
+    cursor.execute("SELECT id FROM contas_receber WHERE fornecedor_id = %s", (id,))
     conta_receber = cursor.fetchone()
 
     if conta_receber:
@@ -2981,7 +3042,7 @@ def remover_fornecedor(id):
         abort(400, "Não é possível excluir fornecedor que está vinculado com contas a receber.")
 
     try:
-        cursor.execute("DELETE FROM fornecedores WHERE id = ?", (id,))
+        cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -3027,7 +3088,7 @@ def plano_contas():
         cursor.execute("""
             SELECT id, codigo, nome, tipo
             FROM categorias_plano_contas
-            WHERE id = ?
+            WHERE id = %s
         """, (categoria_editar_id, ))
         categoria_em_edicao = cursor.fetchone()
     
@@ -3042,7 +3103,7 @@ def plano_contas():
         cursor.execute("""
             SELECT id, codigo, nome, categoria_id
             FROM plano_contas
-            WHERE id = ?
+            WHERE id = %s
         """, (plano_editar_id, ))
 
         plano_em_edicao = cursor.fetchone()
@@ -3077,7 +3138,7 @@ def nova_categoria_plano_conta():
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = ?", (codigo,))
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = %s", (codigo,))
     if cursor.fetchone():
         conn.close()
         abort(400, "Já existe uma categoria com este código.")
@@ -3085,7 +3146,7 @@ def nova_categoria_plano_conta():
     try:
         cursor.execute("""
             INSERT INTO categorias_plano_contas (codigo, nome, tipo)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
         """, (codigo, nome, tipo))
 
         conn.commit()
@@ -3121,13 +3182,13 @@ def novo_plano_conta():
     cursor = conn.cursor()
 
     # Verifica se a categoria existe
-    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (categoria_id,))
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = %s", (categoria_id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Categoria não encontrada.")
 
     # Código único
-    cursor.execute("SELECT id FROM plano_contas WHERE codigo = ?", (codigo,))
+    cursor.execute("SELECT id FROM plano_contas WHERE codigo = %s", (codigo,))
     if cursor.fetchone():
         conn.close()
         abort(400, "Já existe um plano de contas com este código.")
@@ -3135,7 +3196,7 @@ def novo_plano_conta():
     try:
         cursor.execute("""
             INSERT INTO plano_contas (codigo, nome, categoria_id)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
         """, (codigo, nome, categoria_id))
 
         conn.commit()
@@ -3159,7 +3220,7 @@ def editar_categoria_plano_conta(id):
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, codigo, nome, tipo FROM categorias_plano_contas WHERE id = ?", (id, ))
+        cursor.execute("SELECT id, codigo, nome, tipo FROM categorias_plano_contas WHERE id = %s", (id, ))
         categoria = cursor.fetchone()
 
         if not categoria:
@@ -3186,12 +3247,12 @@ def editar_categoria_plano_conta(id):
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (id,))
+        cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = %s", (id,))
         if not cursor.fetchone():
             conn.close()
             abort(404, "Categoria não encontrada.")
 
-        cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = ? AND id != ?", (codigo, id))
+        cursor.execute("SELECT id FROM categorias_plano_contas WHERE codigo = %s AND id != %s", (codigo, id))
         if cursor.fetchone():
             conn.close()
             abort(400, "Já existe outra categoria com este código.")
@@ -3199,8 +3260,8 @@ def editar_categoria_plano_conta(id):
         try:
             cursor.execute("""
                 UPDATE categorias_plano_contas
-                SET codigo = ?, nome = ?, tipo = ?
-                WHERE id = ?
+                SET codigo = %s, nome = %s, tipo = %s
+                WHERE id = %s
             """, (codigo, nome, tipo, id))
 
             conn.commit()
@@ -3222,19 +3283,19 @@ def remover_categoria_plano_conta(id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (id,))
+    cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = %s", (id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Categoria não existe.")
 
     # Segurança: não permitir se houver planos vinculados
-    cursor.execute("SELECT id FROM plano_contas WHERE categoria_id = ? LIMIT 1", (id,))
+    cursor.execute("SELECT id FROM plano_contas WHERE categoria_id = %s LIMIT 1", (id,))
     if cursor.fetchone():
         conn.close()
         abort(400, "Categoria possui planos vinculados.")
 
     try:
-        cursor.execute("DELETE FROM categorias_plano_contas WHERE id = ?", (id,))
+        cursor.execute("DELETE FROM categorias_plano_contas WHERE id = %s", (id,))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -3258,7 +3319,7 @@ def editar_plano_conta(id):
         cursor.execute("""
             SELECT id, codigo, nome, categoria_id
             FROM plano_contas
-            WHERE id = ?
+            WHERE id = %s
         """, (id, ))
         plano = cursor.fetchone()
 
@@ -3286,17 +3347,17 @@ def editar_plano_conta(id):
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (id,))
+        cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (id,))
         if not cursor.fetchone():
             conn.close()
             abort(404, "Plano não encontrado.")
 
-        cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = ?", (categoria_id,))
+        cursor.execute("SELECT id FROM categorias_plano_contas WHERE id = %s", (categoria_id,))
         if not cursor.fetchone():
             conn.close()
             abort(400, "Categoria não encontrada.")
 
-        cursor.execute("SELECT id FROM plano_contas WHERE codigo = ? AND id != ?", (codigo, id))
+        cursor.execute("SELECT id FROM plano_contas WHERE codigo = %s AND id != %s", (codigo, id))
         if cursor.fetchone():
             conn.close()
             abort(400, "Já existe outro plano com este código.")
@@ -3304,8 +3365,8 @@ def editar_plano_conta(id):
         try:
             cursor.execute("""
                 UPDATE plano_contas
-                SET codigo = ?, nome = ?, categoria_id = ?
-                WHERE id = ?
+                SET codigo = %s, nome = %s, categoria_id = %s
+                WHERE id = %s
             """, (codigo, nome, categoria_id, id))
 
             conn.commit()
@@ -3327,24 +3388,24 @@ def remover_plano_conta(id):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id FROM plano_contas WHERE id = ?", (id,))
+    cursor.execute("SELECT id FROM plano_contas WHERE id = %s", (id,))
     if not cursor.fetchone():
         conn.close()
         abort(400, "Plano não existe.")
 
     # Segurança: verificar vínculos
-    cursor.execute("SELECT id FROM contas_pagar WHERE plano_conta_id = ? LIMIT 1", (id,))
+    cursor.execute("SELECT id FROM contas_pagar WHERE plano_conta_id = %s LIMIT 1", (id,))
     if cursor.fetchone():
         conn.close()
         abort(400, "Plano vinculado a contas a pagar.")
 
-    cursor.execute("SELECT id FROM contas_receber WHERE plano_conta_id = ? LIMIT 1", (id,))
+    cursor.execute("SELECT id FROM contas_receber WHERE plano_conta_id = %s LIMIT 1", (id,))
     if cursor.fetchone():
         conn.close()
         abort(400, "Plano vinculado a contas a receber.")
 
     try:
-        cursor.execute("DELETE FROM plano_contas WHERE id = ?", (id,))
+        cursor.execute("DELETE FROM plano_contas WHERE id = %s", (id,))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -3367,7 +3428,7 @@ def login():
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = ? AND ativo = 1", (email, ))
+        cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = %s AND ativo = TRUE", (email, ))
         usuario = cursor.fetchone()
 
         conn.close()
@@ -3390,7 +3451,7 @@ def inject_usuario():
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT nome FROM usuarios WHERE id = ?", (session["usuario_id"],))
+        cursor.execute("SELECT nome FROM usuarios WHERE id = %s", (session["usuario_id"],))
         usuario = cursor.fetchone()
 
         conn.close()
@@ -3406,8 +3467,7 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-
-def criar_banco():
+# def criar_banco():
     conn = get_db()
     cursor = conn.cursor()
 
@@ -3545,18 +3605,18 @@ def criar_banco():
 def backup_banco():
     hoje = datetime.now().strftime("%Y-%m-%d_%H-%M")
 
-    origem = "escola.db"
-    destino = f"backup/escola_{hoje}.db"
-
-    if not os.path.exists(origem):
-        print("❌ Banco não encontrado, backup não realizado.")
-        return
-
     os.makedirs("backup", exist_ok=True)
 
-    shutil.copy2(origem, destino)
+    destino = f"backup/homero_{hoje}.sql"
 
-    print(f"✅ Backup criado em: {destino}")
+    comando = f"pg_dump homero_db > {destino}"
+
+    resultado = os.system(comando)
+
+    if resultado == 0:
+        print(f"✅ Backup criado em: {destino}")
+    else:
+        print("❌ Erro ao criar backup.")
 
 def listar_alunos_db():
     conn = get_db()
@@ -3573,14 +3633,14 @@ def inserir_aluno(nome, idade, turma):
     cursor = conn.cursor()
 
     cursor.execute(
-        "INSERT INTO alunos (nome, idade, turma) VALUES (?, ?, ?)",
+        "INSERT INTO alunos (nome, idade, turma) VALUES (%s, %s, %s)",
         (nome, idade, turma)
     )
 
     conn.commit()
     conn.close()
 
-criar_banco()
+# criar_banco()
 
 # cria um backup automático do banco sempre que o sistema iniciar
 # backup_banco()

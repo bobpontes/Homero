@@ -53,7 +53,7 @@
 
                                     {% for m in movimentacoes_bancarias %}
                                     <tr>
-                                        <td>{{ m[0][8:10] }}/{{ m[0][5:7] }}/{{ m[0][0:4] }}</td>
+                                        <td>{{ m[0].strftime('%d/%m/%Y') }}</td>
                                         {% if m[1] == 'entrada' %}
                                             <td><span class="badge positivo">Entrada</span></td>
                                         {% elif m[1] == 'saida' %}
