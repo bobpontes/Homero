@@ -2995,7 +2995,7 @@ def editar_fornecedor(id):
             cursor.execute(
                 """
                 UPDATE fornecedores
-                SET nome = %s, telefone = %s, email = %s, CPF = %s, CNPJ = %
+                SET nome = %s, telefone = %s, email = %s, CPF = %s, CNPJ = %s
                 WHERE id = %s
                 """,
                 (nome, telefone, email, cpf, cnpj, id)
@@ -3365,7 +3365,7 @@ def editar_plano_conta(id):
         try:
             cursor.execute("""
                 UPDATE plano_contas
-                SET codigo = %s, nome = %s, categoria_id = %
+                SET codigo = %s, nome = %s, categoria_id = %s
                 WHERE id = %s
             """, (codigo, nome, categoria_id, id))
 
