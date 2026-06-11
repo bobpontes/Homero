@@ -1,9 +1,7 @@
-#import psycopg2
 from flask import Flask, request, render_template, redirect, url_for, abort, Response, session
 from datetime import datetime, timedelta, date
 from werkzeug.security import check_password_hash
 from functools import wraps
-#import calendar
 import shutil
 import os
 import csv
@@ -25,37 +23,12 @@ def login_required(f):
 
 # Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
 from utils.datas import adicionar_meses
-#def adicionar_meses(data_base, meses):
-    #dia_original = data_base.day
-
-    #mes = data_base.month -1 + meses
-    #ano = data_base.year + mes // 12
-    #mes = mes % 12 + 1
-    
-    #ultimo_dia = calendar.monthrange(ano, mes)[1]
-
-    ## mantém o mesmo dia sempre que possível
-    #dia = dia_original if dia_original <= ultimo_dia else ultimo_dia
-    #return date(ano, mes, dia)
-
 
 # função para chamar o banco de dados:
 from database.connection import get_db
-#def get_db():
-    #conn = psycopg2.connect(
-        #dbname="homero_db",
-        #user="brunopontes",
-        #host="localhost"
-    #)
-    #return conn
 
 # helper para aplicação de filtro no sql:
 from utils.sql import aplicar_condicao
-#def aplicar_condicao(filtro_sql, condicao):
-    #if filtro_sql:
-        #return filtro_sql + " AND " + condicao
-    #else:
-        #return "WHERE " + condicao
 
 # Formatar mês por extenso em pt-BR:
 meses = {
