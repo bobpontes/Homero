@@ -76,7 +76,7 @@
                         
                         <div class="form-grid">
                             <h2>👥 Lista de Alunos</h2>
-                            <a href="/exportar/alunos" class="btn-primary" type="button">📥 Exportar alunos</a>
+                            <a href="{{ url_for('alunos.exportar_alunos') }}" class="btn-primary" type="button">📥 Exportar alunos</a>
                         </div>
 
                         
@@ -96,8 +96,12 @@
                                 <td>{{ aluno[2] }}</td>
                                 <td>{{ aluno[3] }}</td>
                                 <td>
-                                    <a href="/editar/{{ aluno[0] }}" class="btn-edit">✏️ Editar</a>
-                                    <form method="POST" action="/remover/{{ aluno[0] }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja remover este aluno?')">
+                                    <a href="{{ url_for('alunos.editar_aluno', id = aluno[0]) }}" class="btn-edit">✏️ Editar</a>
+                                    <form method="POST"
+                                    action="{{ url_for('alunos.remover_aluno', id = aluno[0]) }}"
+                                    style="display:inline;"
+                                    onsubmit="return
+                                    confirm('Tem certeza que deseja remover este aluno?')">
                                         <button type="submit" class="btn-delete">🗑️ Remover</button>
                                     </form>
                                 </td>
