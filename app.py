@@ -1,7 +1,7 @@
 from flask import Flask, request, render_template, redirect, url_for, abort, Response, session
 from datetime import datetime, timedelta, date
 from werkzeug.security import check_password_hash
-from functools import wraps
+# from functools import wraps
 import shutil
 import os
 import csv
@@ -13,13 +13,16 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev_key")
 # Data de hoje
 today = date.today()
 
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if "usuario_id" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated_function
+# Login Required:
+from utils.auth import login_required
+
+#def login_required(f):
+    #@wraps(f)
+    #def decorated_function(*args, **kwargs):
+        #if "usuario_id" not in session:
+            #return redirect(url_for("login"))
+        #return f(*args, **kwargs)
+    #return decorated_function
 
 # Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
 from utils.datas import adicionar_meses
@@ -91,6 +94,10 @@ def home():
 # Rotas de alunos:
 from routes.alunos import alunos_bp
 app.register_blueprint(alunos_bp)
+
+# Rotas de autenticação:
+from routes.auth import auth_bp
+app.register_blueprint(auth_bp)
 
 #@app.route("/remover/<int:id>", methods=["POST"])
 #@login_required
@@ -167,7 +174,7 @@ app.register_blueprint(alunos_bp)
             #yield f'"{aluno[0]}","{aluno[1]}","{aluno[2]}","{aluno[3]}"\n'
 
     #return Response(
-        #gerar_csv(),
+        #gerar_csv(), 
         #mimetype="text/csv",
         #headers={"Content-Disposition": "attachment; filename=alunos.csv"}
     #)
@@ -3396,32 +3403,32 @@ def remover_plano_conta(id):
 
     return redirect(url_for("plano_contas"))
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email").lower().strip()
-        senha = request.form.get("senha")
+# @app.route("/login", methods=["GET", "POST"])
+# def login():
+    # if request.method == "POST":
+        # email = request.form.get("email").lower().strip()
+        # senha = request.form.get("senha")
 
-        if not email or not senha:
-            return "Email e senha são obrigatórios", 400
+        # if not email or not senha:
+            # return "Email e senha são obrigatórios", 400
 
-        conn = get_db()
-        cursor = conn.cursor()
+        # conn = get_db()
+        # cursor = conn.cursor()
 
-        cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = %s AND ativo = TRUE", (email, ))
-        usuario = cursor.fetchone()
+        # cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = %s AND ativo = TRUE", (email, ))
+        # usuario = cursor.fetchone()
 
-        conn.close()
+        # conn.close()
 
-        if usuario:
-            senha_hash = usuario[1]
-            if check_password_hash(senha_hash, senha):
-                session["usuario_id"] = usuario[0]
-                return redirect(url_for("home"))
-        else:
-            return "Email ou senha inválidos", 400
+        # if usuario:
+            # senha_hash = usuario[1]
+            # if check_password_hash(senha_hash, senha):
+                # session["usuario_id"] = usuario[0]
+                # return redirect(url_for("home"))
+        # else:
+            # return "Email ou senha inválidos", 400
     
-    return render_template("login.html", erro="Email ou senha inválidos")
+    # return render_template("login.html", erro="Email ou senha inválidos")
 
 @app.context_processor
 def inject_usuario():
@@ -3441,11 +3448,11 @@ def inject_usuario():
 
     return dict(usuario_nome=usuario_nome)
 
-@app.route("/logout")
-@login_required
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
+# @app.route("/logout")
+# @login_required
+# def logout():
+    # session.clear()
+    # return redirect(url_for("login"))
 
 # def criar_banco():
     conn = get_db()
