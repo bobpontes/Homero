@@ -16,14 +16,6 @@ today = date.today()
 # Login Required:
 from utils.auth import login_required
 
-#def login_required(f):
-    #@wraps(f)
-    #def decorated_function(*args, **kwargs):
-        #if "usuario_id" not in session:
-            #return redirect(url_for("login"))
-        #return f(*args, **kwargs)
-    #return decorated_function
-
 # Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
 from utils.datas import adicionar_meses
 
@@ -102,86 +94,6 @@ app.register_blueprint(auth_bp)
 # Rotas de fornecedores:
 from routes.fornecedores import fornecedores_bp 
 app.register_blueprint(fornecedores_bp)
-
-#@app.route("/remover/<int:id>", methods=["POST"])
-#@login_required
-#def remover_aluno(id):
-    #conn = get_db()
-    #cursor = conn.cursor()
-
-
-    #cursor.execute("SELECT * FROM alunos WHERE id = %s", (id, ))
-    #aluno = cursor.fetchone()
-
-    #if aluno is None:
-        #conn.close()
-        #abort(404)
-
-    ## apagar mensalidades associadas a este aluno (antes de apagar o aluno)
-    #cursor.execute("DELETE FROM mensalidades WHERE aluno_id = %s", (id, ))
-    ## (após) apagar o aluno do banco
-    #cursor.execute("DELETE FROM alunos WHERE id = %s", (id,))
-    #conn.commit()
-    #conn.close()
-
-    #return redirect(url_for("home"))
-
-#@app.route("/editar/<int:id>", methods=["GET", "POST"])
-#@login_required
-#def editar_aluno(id):
-
-    #conn = get_db()
-    #cursor = conn.cursor()
-
-    ## buscar aluno primeiro:
-    #cursor.execute("SELECT * FROM alunos WHERE id = %s", (id, ))
-    #aluno = cursor.fetchone()
-
-    #if aluno is None:
-        #conn.close()
-        #abort(404)
-
-    # se o aluno existir, prossegue:
-
-    #if request.method == "POST":
-        #nome = request.form.get("nome")
-        #idade = request.form.get("idade")
-        #turma = request.form.get("turma")
-
-        #cursor.execute(
-            #"UPDATE alunos SET nome = %s, idade = %s, turma = %s WHERE id = %s",
-            #(nome, idade, turma, id)
-        #)
-
-        #conn.commit()
-        #conn.close()
-        #return redirect(url_for("home"))
-
-    #conn.close()
-    #return render_template("editar.html", aluno=aluno)
-
-#@app.route("/exportar/alunos")
-#@login_required
-#def exportar_alunos():
-    #conn = get_db()
-    #cursor = conn.cursor()
-
-    #cursor.execute("SELECT id, nome, idade, turma FROM alunos ORDER BY nome")
-    #alunos = cursor.fetchall()
-
-    #conn.close()
-
-    #def gerar_csv():
-        #yield "ID,Nome,Idade,Turma\n"
-
-        #for aluno in alunos:
-            #yield f'"{aluno[0]}","{aluno[1]}","{aluno[2]}","{aluno[3]}"\n'
-
-    #return Response(
-        #gerar_csv(), 
-        #mimetype="text/csv",
-        #headers={"Content-Disposition": "attachment; filename=alunos.csv"}
-    #)
 
 from routes.mensalidades import mensalidades_bp
 app.register_blueprint(mensalidades_bp)
@@ -2404,33 +2316,6 @@ def remover_plano_conta(id):
 
     return redirect(url_for("plano_contas"))
 
-# @app.route("/login", methods=["GET", "POST"])
-# def login():
-    # if request.method == "POST":
-        # email = request.form.get("email").lower().strip()
-        # senha = request.form.get("senha")
-
-        # if not email or not senha:
-            # return "Email e senha são obrigatórios", 400
-
-        # conn = get_db()
-        # cursor = conn.cursor()
-
-        # cursor.execute("SELECT id, senha_hash FROM usuarios WHERE email = %s AND ativo = TRUE", (email, ))
-        # usuario = cursor.fetchone()
-
-        # conn.close()
-
-        # if usuario:
-            # senha_hash = usuario[1]
-            # if check_password_hash(senha_hash, senha):
-                # session["usuario_id"] = usuario[0]
-                # return redirect(url_for("home"))
-        # else:
-            # return "Email ou senha inválidos", 400
-    
-    # return render_template("login.html", erro="Email ou senha inválidos")
-
 @app.context_processor
 def inject_usuario():
     usuario_nome = None
@@ -2449,146 +2334,6 @@ def inject_usuario():
 
     return dict(usuario_nome=usuario_nome)
 
-# @app.route("/logout")
-# @login_required
-# def logout():
-    # session.clear()
-    # return redirect(url_for("login"))
-
-# def criar_banco():
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS alunos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            idade INTEGER NOT NULL,
-            turma TEXT NOT NULL
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS contas_bancarias (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            tipo TEXT,
-            saldo REAL DEFAULT 0,
-            ativo BOOLEAN DEFAULT 1
-        )
-    ''')
-
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS categorias_plano_contas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        codigo TEXT UNIQUE,
-        nome TEXT NOT NULL,
-        tipo TEXT CHECK(tipo IN ('receita','despesa','transferencia'))
-    )
-    ''')
-
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS plano_contas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        codigo TEXT UNIQUE,
-        nome TEXT NOT NULL,
-        categoria_id INTEGER,
-        FOREIGN KEY (categoria_id) REFERENCES categorias_plano_contas(id)
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS fornecedores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            telefone TEXT,
-            email TEXT,
-            CPF TEXT,
-            CNPJ TEXT)
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS eventos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL
-    )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS mensalidades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            aluno_id INTEGER NOT NULL,
-            valor REAL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            metodo_pagamento TEXT,
-            grupo_parcela_id INTEGER,
-            conta_bancaria_id INTEGER,
-            FOREIGN KEY (aluno_id) REFERENCES alunos(id),
-            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS contas_pagar (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor REAL NOT NULL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            plano_conta_id INTEGER,
-            grupo_parcela_id INTEGER,
-            fornecedor_id INTEGER,
-            evento_id INTEGER,
-            metodo_pagamento TEXT,
-            conta_bancaria_id INTEGER,
-            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
-            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (evento_id) REFERENCES eventos(id),
-            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS contas_receber (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descricao TEXT NOT NULL,
-            valor REAL NOT NULL,
-            data_vencimento TEXT,
-            status TEXT NOT NULL DEFAULT 'pendente' CHECK(status IN ('pendente','pago')),
-            data_pagamento TEXT,
-            plano_conta_id INTEGER,
-            grupo_parcela_id INTEGER,
-            fornecedor_id INTEGER,
-            evento_id INTEGER,
-            metodo_pagamento TEXT,
-            conta_bancaria_id INTEGER,
-            FOREIGN KEY (plano_conta_id) REFERENCES plano_contas(id),
-            FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id),
-            FOREIGN KEY (evento_id) REFERENCES eventos(id),
-            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS movimentacoes_bancarias (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conta_bancaria_id INTEGER NOT NULL,
-            tipo TEXT CHECK(tipo IN ('entrada', 'saida', 'estorno')) NOT NULL,
-            valor REAL NOT NULL,
-            data TEXT NOT NULL,
-            origem TEXT,
-            origem_id INTEGER,
-            descricao TEXT,
-            transferencia_id INTEGER,
-            FOREIGN KEY (conta_bancaria_id) REFERENCES contas_bancarias(id)
-        )
-    ''')
-
-    conn.commit()
-    conn.close()
 
 def backup_banco():
     hoje = datetime.now().strftime("%Y-%m-%d_%H-%M")
@@ -2627,8 +2372,6 @@ def inserir_aluno(nome, idade, turma):
 
     conn.commit()
     conn.close()
-
-# criar_banco()
 
 # cria um backup automático do banco sempre que o sistema iniciar
 # backup_banco()
