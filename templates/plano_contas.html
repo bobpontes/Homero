@@ -60,10 +60,10 @@
                                         <td>{{ categoria[3] or '—' }}</td>
                                         <td>
                                             <div class="modal-actions">
-                                                <form method="GET" action="/plano_contas/categoria/editar/{{ categoria[0] }}">
+                                                <form method="GET" action="{{ url_for('plano_contas.editar_categoria_plano_conta', id=categoria[0]) }}">
                                                     <button type="submit" class="btn-edit">✏️</button>
                                                 </form>
-                                                <form method="POST" action="/plano_contas/categoria/remover/{{ categoria[0] }}">
+                                                <form method="POST" action="{{ url_for('plano_contas.remover_categoria_plano_conta', id=categoria[0]) }}">
                                                     <button class="btn-delete" style="display:inline">🗑️</button>
                                                 </form>
                                             </div>
@@ -80,10 +80,10 @@
                                                 <td>—</td>
                                                 <td>
                                                     <div class="modal-actions">
-                                                        <form method="GET" action="/plano_contas/plano/editar/{{ plano[0] }}">
+                                                        <form method="GET" action="{{ url_for('plano_contas.editar_plano_conta', id=plano[0]) }}">
                                                             <button type="submit" class="btn-edit">✏️</button>
                                                         </form>
-                                                        <form method="POST" action="/plano_contas/plano/remover/{{ plano[0] }}">
+                                                        <form method="POST" action="{{ url_for('plano_contas.remover_plano_conta', id=plano[0]) }}">
                                                             <button class="btn-delete" style="display:inline">🗑️</button>
                                                         </form>
                                                     </div>
@@ -110,7 +110,7 @@
                     {% endif %}
                     </h3>
 
-                    <form method="POST" action="{% if categoria_em_edicao %}/plano_contas/categoria/editar/{{ categoria_em_edicao[0] }}{% else %}{{ url_for('nova_categoria_plano_conta') }}{% endif %}">
+                    <form method="POST" action="{% if categoria_em_edicao %}/plano_contas/categoria/editar/{{ categoria_em_edicao[0] }}{% else %}{{ url_for('plano_contas.nova_categoria_plano_conta') }}{% endif %}">
                         <div class="form-grid">
                             <div class="form-field">
                                 <label>Código</label>
@@ -158,7 +158,7 @@
                     {% endif %}
                     </h3>
 
-                    <form method="POST" action="{% if plano_em_edicao %}/plano_contas/plano/editar/{{ plano_em_edicao[0] }}{% else %}{{ url_for('novo_plano_conta') }}{% endif %}">
+                    <form method="POST" action="{% if plano_em_edicao %}/plano_contas/plano/editar/{{ plano_em_edicao[0] }}{% else %}{{ url_for('plano_contas.novo_plano_conta') }}{% endif %}">
                         <div class="form-grid">
                             <div class="form-field">
                                 <label>Categoria</label>
