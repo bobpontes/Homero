@@ -63,7 +63,7 @@
                                     <td>{{ g[7]|replace("-", "/") }} até {{ g[8]|replace("-", "/") }}</td>
                                     <td>R$ {{ "%.2f"|format(g[9] or 0) }}</td>
                                     <td>
-                                        <a href="{{ url_for('detalhar_grupo_conta_pagar', grupo_id=g[0]) }}" class="btn-edit">
+                                        <a href="{{ url_for('contas_pagar.detalhar_grupo_conta_pagar', grupo_id=g[0]) }}" class="btn-edit">
                                             Abrir Grupo
                                         </a>
                                     </td>
@@ -73,7 +73,7 @@
                         </table>
 
                         <div class="modal-actions">
-                            <a href="{{ url_for('contas_pagar') }}" class="btn-secondary">Voltar</a>
+                            <a href="{{ url_for('contas_pagar.contas_pagar') }}" class="btn-secondary">Voltar</a>
                         </div>
                     </div>
                 </section>

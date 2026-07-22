@@ -45,7 +45,7 @@
                         <h2>Ações</h2>
                         <div class="form-actions" style="justify-content: flex-start;">
                             <button class="btn-pagar" onclick="abrirModalNova()">✚ Nova Conta</button>
-                            <a href="{{ url_for('listar_grupos_contas_pagar') }}" class="btn-edit">
+                            <a href="{{ url_for('contas_pagar.listar_grupos_contas_pagar') }}" class="btn-edit">
                                 🧩 Editar Grupos de Contas
                             </a>
                         </div>
@@ -116,7 +116,7 @@
                                         >
                                             💳
                                         </button>
-                                        <form action="/contas_pagar/remover/{{ c[0] }}" method="POST" style="display:inline">
+                                        <form action="{{ url_for('contas_pagar.remover_conta', id=c[0]) }}" method="POST" style="display:inline">
                                             <button type="submit" class="btn-delete" onclick="return confirm('Tem certeza que deseja excluir esta conta?')">🗑️</button>
                                         </form>
                                         
@@ -140,7 +140,7 @@
                 <div class="modal-content">
                     <h3>Nova Conta a Pagar</h3>
 
-                    <form method="POST" action="{{ url_for('nova_conta') }}">
+                    <form method="POST" action="{{ url_for('contas_pagar.nova_conta') }}">
                         
                         <div class="form-grid">
                         
@@ -331,7 +331,7 @@
                 const valor = botao.dataset.valor
                 const data = botao.dataset.data
 
-                form.action = "/contas_pagar/pagar/" + id
+                form.action = "{{ url_for('contas_pagar.registrar_conta', id=0) }}".replace("0", id);
 
                 document.getElementById("pagamentoId").value = id
                 document.getElementById("pagamentoDescricao").value = descricao
@@ -364,7 +364,7 @@
                 const planoId = botao.dataset.planoId
                 const fornecedorId = botao.dataset.fornecedorId
 
-                form.action = "/contas_pagar/atualizar/" + id
+                form.action = "{{ url_for('contas_pagar.atualizar_conta_pagar', id=0) }}".replace("0", id);
 
                 document.getElementById("editarContaPagarId").value = id
                 document.getElementById("editarContaPagarDescricao").value = descricao

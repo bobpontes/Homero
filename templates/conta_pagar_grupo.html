@@ -35,7 +35,7 @@
                     <h2>{{ descricao_grupo }}</h2>
                     <p class="subtitulo">As parcelas pagas ficam bloqueadas. As pendentes podem ser ajustadas individualmente ou em lote.</p>
 
-                    <form method="POST" action="{{ url_for('atualizar_grupo_conta_pagar', grupo_id=grupo_id) }}">
+                    <form method="POST" action="{{ url_for('contas_pagar.atualizar_grupo_conta_pagar', grupo_id=grupo_id) }}">
                         <div class="form-grid">
                             <div class="form-field">
                                 <label>Aplicar alterações a partir do vencimento</label>
@@ -75,7 +75,7 @@
 
                         <div class="modal-actions">
                             <button type="submit" class="btn-primary">Aplicar em Lote</button>
-                            <a href="{{ url_for('listar_grupos_contas_pagar') }}" class="btn-secondary">Voltar</a>
+                            <a href="{{ url_for('contas_pagar.listar_grupos_contas_pagar') }}" class="btn-secondary">Voltar</a>
                         </div>
                     </form>
 
@@ -210,7 +210,7 @@
                 const planoId = botao.dataset.planoId
                 const fornecedorId = botao.dataset.fornecedorId
 
-                form.action = "/contas_pagar/grupo/{{ grupo_id }}/parcela/" + id + "/atualizar"
+                form.action = "{{ url_for('contas_pagar.atualizar_conta_pagar_no_grupo', grupo_id=grupo_id, id=0) }}".replace("0", id);
 
                 document.getElementById("editarContaPagarGrupoId").value = id
                 document.getElementById("editarContaPagarGrupoDescricao").value = descricao
