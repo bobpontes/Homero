@@ -16,8 +16,8 @@ today = date.today()
 # Login Required:
 from utils.auth import login_required
 
-# Adicionar Meses na data inicial de parcelas de mensalidades, contas_pagar e contas_receber:
-from utils.datas import adicionar_meses
+# Utilidades de datas:
+from utils.datas import adicionar_meses, MESES
 
 # função para chamar o banco de dados:
 from database.connection import get_db
@@ -25,21 +25,6 @@ from database.connection import get_db
 # helper para aplicação de filtro no sql:
 from utils.sql import aplicar_condicao
 
-# Formatar mês por extenso em pt-BR:
-meses = {
-    "01": "Janeiro",
-    "02": "Fevereiro",
-    "03": "Março",
-    "04": "Abril",
-    "05": "Maio",
-    "06": "Junho",
-    "07": "Julho",
-    "08": "Agosto",
-    "09": "Setembro",
-    "10": "Outubro",
-    "11": "Novembro",
-    "12": "Dezembro"
-}
 
 @app.errorhandler(404)
 def pagina_nao_encontrada(e):
@@ -124,8 +109,8 @@ def contas_receber():
         filtro_sql = "WHERE DATE(contas_receber.data_vencimento) BETWEEN DATE(%s) AND DATE(%s)"
         parametros = (data_inicio, data_fim)
         
-        mes1 = meses[data_inicio[5:7]]
-        mes2 = meses[data_fim[5:7]]
+        mes1 = MESES[data_inicio[5:7]]
+        mes2 = MESES[data_fim[5:7]]
 
         periodo_formatado = (
             f"{data_inicio[8:10]} {mes1[:3]} {data_inicio[0:4]} "
@@ -143,7 +128,7 @@ def contas_receber():
             
         filtro_sql = "WHERE TO_CHAR(contas_receber.data_vencimento, 'YYYY-MM') = %s"
         parametros = (mes, )
-        periodo_formatado = f"{meses[mes[5:7]]}/{mes[0:4]}"
+        periodo_formatado = f"{MESES[mes[5:7]]}/{mes[0:4]}"
 
     conn = get_db()
     cursor = conn.cursor()
