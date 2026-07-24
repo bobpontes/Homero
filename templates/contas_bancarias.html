@@ -137,7 +137,7 @@
                 const modal = document.getElementById("modalBank")
                 const form = document.getElementById("formBank")
             
-                form.action = "/contas_bancarias/nova"
+                form.action = "{{ url_for('contas_bancarias.nova_conta_bancaria') }}"
 
                 modal.style.display = "flex"
             }
