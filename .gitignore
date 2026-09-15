@@ -9,3 +9,4 @@ backup/
 .env
 .env.*
 !.env.example
+certificados/

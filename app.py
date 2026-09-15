@@ -1,6 +1,9 @@
 from flask import Flask, request, render_template, redirect, url_for, session
 from datetime import datetime, date
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev_key")
