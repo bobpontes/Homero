@@ -6,3 +6,6 @@ alunos.json
 .env
 .DS_Store
 backup/
+.env
+.env.*
+!.env.example
