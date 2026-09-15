@@ -22,7 +22,7 @@
                 
                 <br><br>
                 <p class="usuario-logado">👤 {{ usuario_nome }}</p>
-                <a href="{{ url_for('logout') }}" class="logout-btn">Sair</a>
+                <a href="{{ url_for('auth.logout') }}" class="logout-btn">Sair</a>
             </nav>
         </aside>
         
@@ -104,7 +104,7 @@
                     <h2>Ações</h2>
                     <div class="form-actions" style="justify-content: flex-start;">
                         <button class="btn-pagar" onclick="abrirModalNova()">✚ Nova Conta</button>
-                        <a href="{{ url_for('listar_grupos_contas_receber') }}" class="btn-edit">
+                        <a href="{{ url_for('contas_receber.listar_grupos_contas_receber') }}" class="btn-edit">
                             🧩 Editar Grupos de Recebimentos
                         </a>
                     </div>
@@ -195,7 +195,7 @@
     <div class="modal-content">
         <h3>Nova Conta a Receber</h3>
 
-        <form method="POST" action="{{ url_for('nova_receita') }}">
+        <form method="POST" action="{{ url_for('contas_receber.nova_receita') }}">
             
             <div class="form-grid">
             

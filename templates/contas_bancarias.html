@@ -22,7 +22,7 @@
                 
                 <br><br>
                 <p class="usuario-logado">👤 {{ usuario_nome }}</p>
-                <a href="{{ url_for('logout') }}" class="logout-btn">Sair</a>
+                <a href="{{ url_for('auth.logout') }}" class="logout-btn">Sair</a>
             </nav>
         </aside>
         
@@ -137,7 +137,7 @@
                 const modal = document.getElementById("modalBank")
                 const form = document.getElementById("formBank")
             
-                form.action = "/contas_bancarias/nova"
+                form.action = "{{ url_for('contas_bancarias.nova_conta_bancaria') }}"
 
                 modal.style.display = "flex"
             }
