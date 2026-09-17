@@ -95,6 +95,10 @@ app.register_blueprint(contas_receber_bp)
 # Rotas do extrato bancário:
 from routes.extrato import extrato_bp
 app.register_blueprint(extrato_bp)
+
+# Rotas do extrato bancário do Banco Inter:
+from routes.extrato_bancario import extrato_bancario_bp
+app.register_blueprint(extrato_bancario_bp)
     
 
 @app.context_processor
